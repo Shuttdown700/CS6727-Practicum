@@ -27,7 +27,7 @@ SKIP_UPGRADE="${SKIP_UPGRADE:-0}"
 # Destinations lab clients may NOT be forwarded to. Default = all private/link-local/
 # CGNAT space, so the home LAN stays blocked even if its DHCP subnet changes.
 # Narrow to just the home subnet if preferred, e.g. BLOCK_NETS="192.168.1.0/24"
-BLOCK_NETS="${BLOCK_NETS:-10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10}"
+BLOCK_NETS="${BLOCK_NETS:-10.0.0.0/8, 169.254.0.0/16, 100.64.0.0/10}"
 FW_HOOK="/etc/NetworkManager/dispatcher.d/90-lab-ap-fw"
 
 log()  { printf '\e[1;32m[+]\e[0m %s\n' "$*"; }
