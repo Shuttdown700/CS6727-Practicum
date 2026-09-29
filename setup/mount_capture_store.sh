@@ -4,7 +4,7 @@
 #   //10.0.0.213/Appo  ->  /mnt/appo
 #
 # The Pi's own traffic uses the OUTPUT hook, not FORWARD, so this reaches the
-# home LAN regardless of which lab-segment.sh variant is active. Lab clients
+# home LAN regardless of which lab_segment.sh variant is active. Lab clients
 # still cannot: the block lists only govern forwarded traffic.
 #
 # Usage:
