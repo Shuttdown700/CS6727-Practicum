@@ -25,7 +25,7 @@ set -euo pipefail
 # 2.4 GHz APs on the same radio space should use non-overlapping channels (1/6/11).
 AP_SPECS=(
   "LAB-NET1|192.168.67.1/24|bg|6|98:48:27:E8:3E:ED"
-  "LAB-NET2|192.168.68.1/24|bg|11|3C:33:00:60:92:C5"
+  "LAB-NET2|192.168.68.1/24|bg|11|20:E1:5D:8D:78:A3"
 )
 
 # ---- config (override via env) ------------------------------------------------
