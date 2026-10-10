@@ -1,0 +1,156 @@
+==============================================================================
+TREE-LEVEL SCORES
+==============================================================================
+
+(a) AGGREGATE -- sum of leaf risk over leaves assigned to each tree.
+    Measures total exposure carried by the tree. A leaf shared between two
+    trees counts once in each, so these do not sum to the grand total.
+
+  tree     leaves       Baseline  Observational       Mediated
+  AN-1         21            146            138            100
+  AN-3         16            108            100             44
+  AN-5         15             89             84             30
+  AN-7         17              0              0             57
+
+  change against baseline (negative is a risk reduction)
+    AN-1    Observational: -8 (-5.5%)   Mediated: -46 (-31.5%)
+    AN-3    Observational: -8 (-7.4%)   Mediated: -64 (-59.3%)
+    AN-5    Observational: -5 (-5.6%)   Mediated: -59 (-66.3%)
+    AN-7    Observational: +0   Mediated: +57
+
+  AN-1 -- Fabricated part deviates from authoritative design, undetected
+     leaves: L-001, L-002, L-003, L-004, L-005, L-006, L-007, L-008, L-009, L-010, L-011, L-012, L-013, L-014, L-015, L-016, L-017, L-018, L-061, L-063, L-064
+  AN-3 -- Repository contents altered or destroyed, undetected, unattributed
+     leaves: L-005, L-006, L-019, L-020, L-021, L-022, L-023, L-024, L-025, L-026, L-027, L-028, L-029, L-030, L-031, L-062
+  AN-5 -- Authoritative design artifact lost or unidentifiable
+     leaves: L-007, L-028, L-029, L-032, L-033, L-034, L-035, L-036, L-037, L-038, L-039, L-040, L-041, L-042, L-043
+  AN-7 -- Fabrication proceeds unmediated and unrecorded during outage
+     leaves: L-044, L-045, L-046, L-047, L-048, L-049, L-050, L-051, L-052, L-053, L-054, L-055, L-056, L-057, L-058, L-059, L-060
+
+(b) PROPAGATED -- MIN/MAX through the AND/OR gates to the root.
+    Measures the easiest available path rather than total exposure.
+
+  AN-1  (OR root)
+    Baseline         root = 8   critical child: N-110 at 8
+    Observational    root = 5   critical child: N-110 at 5
+    Mediated         root = 5   critical child: N-120 at 5
+
+  AN-3  (AND root)
+    Baseline         root = 5   critical child: N-301 at 5
+    Observational    root = 5   critical child: N-301 at 5
+    Mediated         root = 0   critical child: N-302 at 0
+
+  AN-5  (AND root)
+    Baseline         root = 2   critical child: N-502 at 2
+    Observational    root = 2   critical child: N-502 at 2
+    Mediated         root = 0   critical child: N-502 at 0
+
+  AN-7  (AND root)
+    Baseline         root = --
+    Observational    root = --
+    Mediated         root = 0   critical child: N-704 at 0
+
+  Full node values
+  ------------------------------------------------------------
+  AN-1
+    node        Base   Obse   Medi  label
+    N-101          8      8      8  Deviation introduced upstream of submission
+    N-102          8      8      2  Job is accepted and fabricated
+    N-103          8      5      2  Deviation not detected on the submission path
+    N-110          8      5      2  Path A: deviation reaches the part via the submission path
+    N-111          8      8      8  On the workstation, before publication
+    N-112          8      8      5  In shared storage, after publication
+    N-113          5      5      5  In transit to fabrication equipment
+    N-114          5      5      5  Instruction placed on equipment-attached media
+    N-115          8      5      5  Deviation not detected on the direct-load path
+    N-120          5      5      5  Path B: deviation reaches the part via direct load at the mach
+    AN-1           8      5      5  Fabricated part deviates from authoritative design, undetected
+    L-001          2      2      2  Incorrect slicer profile or parameters applied
+    L-002          5      5      5  Incorrect or outdated source model selected
+    L-003          5      5      5  Deliberate modification by workstation-resident actor
+    L-004          8      8      8  Slicer or toolchain component compromised
+    L-005          8      8      2  Artifact written to repository outside mediated path
+    L-006          8      8      2  Artifact modified by compromised host with write access
+    L-007          5      5      5  Artifact overwritten by another operator
+    L-008          5      5      5  Job content altered between submission and machine
+    L-009          2      2      2  Content altered during manual media transfer
+    L-010          5      5      5  File placed on media outside the sanctioned path
+    L-011          5      5      5  Media carrying unknown content swapped between machines
+    L-012         10     10      2  Job accepted without integrity verification against manifest
+    L-013          8      8      2  Equipment accepts job without provenance check
+    L-014         10      8      2  No hash comparison against authoritative manifest
+    L-015          8      8      2  No version authority check at submission
+    L-016          8      5      5  No post-fabrication artifact reconciliation
+    L-017         10     10     10  Deviation below visual and dimensional inspection threshold
+    L-018         10     10     10  Part not functionally tested before issue
+    L-061          8      8      8  Machine accepts a locally initiated job, bypassing submission
+    L-063          8      8      8  Selected artifact is authentic but not the intended design
+    L-064          8      5      5  No artifact inventory verification on equipment media
+
+  AN-3
+    node        Base   Obse   Medi  label
+    N-301          5      5      5  Adversary achieves execution on a workstation
+    N-302          5      5      0  Workstation holds unmediated access to the repository
+    N-303          5      5      0  The action is neither detected nor attributable
+    AN-3           5      5      0  Repository contents altered or destroyed, undetected, unattrib
+    L-019          5      5      5  Malicious content retrieved from public model repository
+    L-020          5      5      5  Malicious content received by email
+    L-021          5      5      5  Software installed outside the validation process
+    L-022          5      5      5  Malicious content introduced via removable media
+    L-023          5      5      5  Operator enables active content when prompted
+    L-024          5      5      0  Direct network path exists from workstation to repository
+    L-025          5      5      0  Workstation holds write credentials to the repository
+    L-026          8      8      2  Repository accepts writes without service mediation
+    L-027         10      8      2  No integrity manifest exists for repository contents
+    L-028          8      5      2  No change detection on the repository
+    L-029          5      5      0  Repository writes not attributable to an individual
+    L-030         10     10      2  Backup reachable within the same credential scope
+    L-031          8      5      2  Affected artifact set cannot be enumerated after the fact
+
+  AN-5
+    node        Base   Obse   Medi  label
+    N-501          5      5      2  Path to loss
+    N-502          2      2      0  The loss is not detected in time to recover
+    N-511          5      5      2  Overwrite destroys the authoritative version
+    N-512          5      5      0  Authoritative version exists but cannot be identified
+    AN-5           2      2      0  Authoritative design artifact lost or unidentifiable
+    L-028          8      5      2  No change detection on the repository
+    L-029          5      5      0  Repository writes not attributable to an individual
+    L-032          5      5      5  Two or more operators hold divergent working copies
+    L-033          8      8      2  Repository permits in-place overwrite
+    L-034         10      8      2  Prior version not retained on write
+    L-035          8      8      2  No write-conflict detection at publication
+    L-036          5      5      5  Operator unaware a newer version exists
+    L-037          5      5      0  No version metadata attached to stored artifacts
+    L-038          5      5      0  No supersession record between versions
+    L-039          5      5      0  No query for the current authoritative version
+    L-040          5      5      5  Originating operator unavailable (personnel turnover)
+    L-041          2      2      0  No notification to the prior author on overwrite
+    L-042          5      5      0  Version currency not checked at retrieval
+    L-043          8      8      2  Version currency not checked at job submission
+
+  AN-7
+    node        Base   Obse   Medi  label
+    N-701         --     --      5  The mediating service becomes unavailable
+    N-702         --     --      2  Operational pressure requires fabrication to continue
+    N-703         --     --      5  A bypass path is available and used
+    N-704         --     --      0  The bypass produces no record
+    AN-7          --     --      0  Fabrication proceeds unmediated and unrecorded during outage
+    L-044         --     --      2  Hardware failure of the hosting platform
+    L-045         --     --      5  Software fault or resource exhaustion
+    L-046         --     --      5  Network partition between service and equipment
+    L-047         --     --      5  Storage media failure on the hosting platform
+    L-048         --     --      2  Deliberate denial of the service by an insider
+    L-049         --     --      2  Fabrication task deadline falls within the support window
+    L-050         --     --      5  No on-site support available to restore service
+    L-051         --     --      5  Remote support latency exceeds deadline margin
+    L-052         --     --      5  Physical media path to equipment remains open
+    L-053         --     --      5  Direct network path to equipment restorable by operator
+    L-054         --     --      5  Personal device used to prepare fabrication instructions
+    L-055         --     --      5  Equipment front panel accepts locally initiated jobs
+    L-056         --     --      2  No break-glass procedure defined
+    L-057         --     --      2  Break-glass authorization not time-limited
+    L-058         --     --      0  Bypass action not logged
+    L-059         --     --      0  Bypass not reported on service restoration
+    L-060         --     --      2  No reconciliation of fabrication activity after restoration
+

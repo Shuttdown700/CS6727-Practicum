@@ -1,0 +1,45 @@
+==============================================================================
+VALIDATION REPORT
+==============================================================================
+Every scored cell recomputed from the NIST SP 800-30 Rev. 1 matrices in
+core.py. A clean run means the workbook's arithmetic is internally
+consistent; it does not validate the band ASSIGNMENTS, which are judgments.
+
+scored-cell checks : PASS -- 0 disagreements
+
+------------------------------------------------------------------------------
+CROSS-REFERENCE CHECKS
+------------------------------------------------------------------------------
+leaf nodes in 'Attack Tree Structure' : 64
+rows in 'Attack Leaf Risk Matrix'       : 64
+  in structure but not scored  : none
+  scored but not in structure  : none
+
+trees referenced by leaves but having no Root node row: none
+
+condition leaves with no mapped solution feature (4):
+  L-052, L-055, L-061, L-063
+
+mapped leaves with no effect-confidence value (0):
+  none
+
+duplicate leaf descriptions: 0
+
+------------------------------------------------------------------------------
+LOOKUP-TABLE ORIENTATION
+------------------------------------------------------------------------------
+The 'Scoring Scales & Logic' worksheet renders G-5 and I-2 with their row
+labels ascending (Very Low -> Very High) while the cell values run the other
+way. Read literally, that sheet says likelihood Very High with impact Very
+High yields risk Low. The matrices in core.py are the corrected
+orientation, and they reproduce every scored cell above exactly -- so the
+DATA is right and only the displayed tables are mislabelled. Fix the sheet
+before reproducing those tables in the report.
+
+Also in that sheet:
+  - G-4 gives Very High and High the same description ('almost certain').
+    High should read 'highly likely'.
+  - the block labelled 'TABLE I-3' is a copy of the impact scale (H-3),
+    not the non-adversarial risk matrix.
+  - I-2's axis caption reads 'Likelihood of Event Resulting in Adverse
+    Impacts'; I-2 combines overall likelihood with IMPACT.

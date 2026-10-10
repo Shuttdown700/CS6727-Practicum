@@ -117,5 +117,5 @@ cat <<EOF
     Remove:  sudo $0 --remove
 
     Note: the Pi's own traffic is OUTPUT, not FORWARD, so this mount keeps
-    working under every lab-segment.sh variant, including 'full'.
+    working under every lab_segment.sh variant, including 'full'.
 EOF

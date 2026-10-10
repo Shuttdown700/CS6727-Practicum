@@ -1,0 +1,118 @@
+==============================================================================
+SENSITIVITY ANALYSIS
+==============================================================================
+common leaf set : 47 leaves scored under every variant
+band ladder     : [0, 2, 5, 8, 10]
+shifts tested   : [-2, -1, 0, 1, 2]
+monte carlo     : 4,000 trials, seed 20261009, per-band step probabilities -1/0/+1 = 0.22/0.56/0.22
+
+Perturbed: the Frequency and Likelihood-of-Adverse-Impact bands on
+frequency leaves, and the Impact band on every leaf. NOT perturbed:
+condition-leaf likelihood, which is fixed by control status rather than
+estimated -- moving it would perturb the variant definition itself.
+
+------------------------------------------------------------------------------
+A. DETERMINISTIC BAND SHIFT
+------------------------------------------------------------------------------
+  shift          Baseline  Observational       Mediated   obs red   med red
+  -2                   61             61             16      0.0%     73.8%
+  -1                  169            160             75      5.3%     55.6%
+  +0                  309            291            163      5.8%     47.2%  <- as scored
+  +1                  431            411            252      4.6%     41.5%
+  +2                  466            448            274      3.9%     41.2%
+
+  ORDERING STABLE. No pair of variants reverses order at any shift tested,
+  so the ranking survives a systematic one- and two-band estimation error in
+  either direction. The claim to put in the report, with exactly this scope:
+
+      Shifting every estimated band one or two steps in either direction
+      leaves the relative ordering of the variants unchanged, so the
+      comparative conclusions are robust to systematic band-assignment
+      error of that magnitude.
+
+  Ties (two variants on the same total -- a loss of resolution from band
+  clamping, not a reversal):
+    -2: Baseline = Observational = 61
+
+  Bands clamp at the ends of the ladder, so totals compress sharply at +/-2 as
+  leaves accumulate on Very High or Very Low. Treat the +/-1 rows as the
+  informative ones and +/-2 as a stress case; the -2 column in particular
+  pushes most leaves to the bottom of the scale and should not be quoted as a
+  risk estimate.
+
+  Note the observational reduction is NOT monotone in the shift (it peaks near
+  the as-scored assignment). That is the coarseness of Table I-2 at work rather
+  than a modelling error: a partial control only changes the score where the
+  likelihood drop crosses a matrix boundary, and shifting the impact bands
+  moves which leaves sit on such a boundary.
+
+------------------------------------------------------------------------------
+B. MONTE CARLO DISTRIBUTION
+------------------------------------------------------------------------------
+  variant           as scored   median     mean      sd      p5    p25    p75     p95
+  Baseline                309      301    300.7    11.7     282    293    309     320
+  Observational           291      284    284.3    11.3     266    277    292     303
+  Mediated                163      159    158.8     8.7     145    153    165     173
+
+  Risk reduction against baseline, computed per trial so numerator and
+  denominator move together:
+
+  variant           as scored   median      p5     p95   interval width
+  Observational          5.8%     5.5%    3.8%    7.1%            3.3 pts
+  Mediated              47.2%    47.2%   44.7%   49.8%            5.1 pts
+
+  Mediated beats observational in 100.0% of trials
+  (mean margin 125.5 points, sd 6.0).
+
+  Report the interval rather than the point estimate. The as-scored value
+  sits inside it by construction and is not more trustworthy than the rest
+  of the distribution -- it is one draw from the same uncertainty.
+
+------------------------------------------------------------------------------
+C. PER-TREE DETERMINISTIC SHIFT
+------------------------------------------------------------------------------
+  AN-1  (n=21)
+    shift          Baseline  Observational       Mediated
+    -2                   32             32             14
+    -1                   80             77             48
+    +0                  146            138            100
+    +1                  194            185            136
+    +2                  208            200            152
+
+  AN-3  (n=16)
+    shift          Baseline  Observational       Mediated
+    -2                   22             22              2
+    -1                   62             59             19
+    +0                  108            100             44
+    +1                  154            148             78
+    +2                  160            154             78
+
+  AN-5  (n=15)
+    shift          Baseline  Observational       Mediated
+    -2                   13             13              0
+    -1                   46             43             10
+    +0                   89             84             30
+    +1                  131            124             56
+    +2                  148            142             62
+
+  AN-7  (n=17)
+    shift          Baseline  Observational       Mediated
+    -2                    0              0              0
+    -1                    0              0             18
+    +0                    0              0             57
+    +1                    0              0             98
+    +2                    0              0            126
+
+------------------------------------------------------------------------------
+D. WHAT THIS DOES NOT TEST
+------------------------------------------------------------------------------
+  - The band ASSIGNMENTS' direction. Perturbing symmetrically around each
+    estimate assumes the estimates are unbiased. A systematic optimism about
+    the architecture's own leaves would not show up here.
+  - The lookup matrices. Tables G-5 and I-2 are held fixed; their coarseness
+    at high impact is a structural property of the method, not sampling error.
+  - The tree structure. Leaf membership and the control mapping are fixed.
+  - Independence. Monte Carlo draws each band independently; real estimation
+    error is likely correlated within a tree, which would widen the interval.
+    The deterministic sweep in section A is the fully-correlated bound and
+    brackets that case.

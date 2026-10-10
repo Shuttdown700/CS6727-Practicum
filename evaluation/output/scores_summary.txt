@@ -1,0 +1,111 @@
+==============================================================================
+CONTROL TRACEABILITY MATRIX -- EVALUATION SUMMARY
+==============================================================================
+source    : Control Traceability Matrix.xlsx
+leaves    : 64  (26 frequency, 38 condition)
+nodes     : 89  (4 roots, 21 gates, 64 leaf nodes)
+trees     : AN-1, AN-3, AN-5, AN-7
+edge table: loaded (88 edges)
+
+------------------------------------------------------------------------------
+AGGREGATE LEAF RISK -- COMMON LEAF SET
+------------------------------------------------------------------------------
+The only like-for-like comparison. 47 leaves scored under every variant;
+17 further leaves exist only under the mediated variant and are reported
+separately rather than mixed in.
+
+  component                                  Baseline  Observational       Mediated
+  frequency leaves (n=17)                          92             92             92
+  condition leaves (n=30)                         217            199             71
+  COMMON SET (n=47)                               309            291            163
+
+  reduction against baseline                 Baseline  Observational       Mediated
+  frequency leaves (n=17)                          --           0.0%           0.0%
+  condition leaves (n=30)                          --           8.3%          67.3%
+  COMMON SET (n=47)                                --           5.8%          47.2%
+
+  risk introduced by the mediated architecture : 57
+    across 17 leaves that exist only under it (9 frequency, 8 condition)
+  mediated all-in total                        : 163 + 57 = 220
+
+  CAUTION. Do not compare the all-in mediated total against the baseline total:
+  they cover different leaf populations (64 against 47). The naive subtraction
+  reads 28.8%, which understates the architecture and hides the introduced risk.
+
+------------------------------------------------------------------------------
+AGGREGATE LEAF RISK -- BY TREE
+------------------------------------------------------------------------------
+  tree     leaves  Baseline  Observational  Mediated   reduction
+  AN-1         21       146            138       100   31.5%
+  AN-3         16       108            100        44   59.3%
+  AN-5         15        89             84        30   66.3%
+  AN-7         17         0              0        57   n/a (baseline 0)
+
+------------------------------------------------------------------------------
+CONDITION-LEAF COVERAGE
+------------------------------------------------------------------------------
+  variant                    Unaddressed   Partially Addressed       Fully Addressed
+  Baseline                            30                     0                     0
+  Observational                       21                     9                     0
+  Mediated                             4                     6                    28
+
+  Report coverage beside the risk totals. Table I-2 returns the same value at
+  likelihood 10 and likelihood 5 when impact is Moderate, so a partial control on
+  a Moderate-impact leaf changes status without changing score.
+
+------------------------------------------------------------------------------
+LEAVES NO VARIANT MOVES
+------------------------------------------------------------------------------
+  21 of 47 leaves scored at baseline hold the same risk under every variant.
+  17 are frequency leaves, constant by construction. The 4 CONDITION leaves below
+  are the residual the architecture does not reach, and belong in the discussion:
+
+    L-061  risk  8  Enabler   [AN-1]         Machine accepts a locally initiated job,...
+    L-063  risk  8  Amplifier [AN-1]         Selected artifact is authentic but not...
+    L-008  risk  5  Enabler   [AN-1]         Job content altered between submission...
+    L-010  risk  5  Enabler   [AN-1]         File placed on media outside the...
+
+------------------------------------------------------------------------------
+TOP TEN LEAVES BY BASELINE RISK
+------------------------------------------------------------------------------
+  L-012  10 ->  2  (-8)
+  L-014  10 ->  2  (-8)
+  L-017  10 -> 10  (+0)
+  L-018  10 -> 10  (+0)
+  L-027  10 ->  2  (-8)
+  L-030  10 ->  2  (-8)
+  L-034  10 ->  2  (-8)
+  L-004   8 ->  8  (+0)
+  L-005   8 ->  2  (-6)
+  L-006   8 ->  2  (-6)
+
+  Any frequency leaf here is outside the architecture's scope by design and needs
+  a procedural or enterprise-IT recommendation rather than a software feature.
+
+------------------------------------------------------------------------------
+RISK REDUCTION BY SOLUTION FEATURE (MEDIATED VARIANT)
+------------------------------------------------------------------------------
+     43    8 leaves   Version Authority
+     41    7 leaves   Repository Access Mediation
+     20    5 leaves   Fabrication Job Authorization
+     16    2 leaves   Ingest Mediation
+     12    2 leaves   Repository Change Detection
+      8    2 leaves   Operator Attribution
+      6    3 leaves   Fabrication Activity Recording
+      0    1 leaf    Fabrication Artifact Verification
+
+  Not listed, because every leaf they address exists only under the mediated
+  variant and so has no baseline to reduce against:
+          Degraded-Mode Operation  (L-056, L-057, L-058, L-059)
+  These features are not ineffective -- they address risk the architecture
+  itself introduces, which is accounted for as introduced risk above.
+
+------------------------------------------------------------------------------
+SOLUTION EFFECT CONFIDENCE
+------------------------------------------------------------------------------
+   34   Analytically Asserted
+
+  Every mapped leaf currently reads the same value, so this column is not yet
+  discriminating. It becomes load-bearing once bench measurement separates
+  demonstrated effects from asserted ones.
+

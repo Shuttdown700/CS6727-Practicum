@@ -1,0 +1,142 @@
+==========================================================================================================================================================================
+LEAF-LEVEL SCORES
+==========================================================================================================================================================================
+delta columns are against the baseline variant; negative is a risk reduction.
+'--' means the leaf does not exist under that variant.
+
+ID     type       cond role trees         classes          freq loai  OL  imp  Base risk  Obse risk  Medi risk  d obs  d med  feature
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+L-001  Frequency  -         AN-1          RC-3                5    2   2    2          2          2          2     +0     +0  
+L-002  Frequency  -         AN-1          RC-3,RC-5           5    5   5    8          5          5          5     +0     +0  
+L-003  Frequency  -         AN-1          RC-3                2    8   5    8          5          5          5     +0     +0  
+L-004  Frequency  -         AN-1          RC-3,RC-6           2   10   5   10          8          8          8     +0     +0  
+L-005  Condition  Amplifier AN-1,AN-3     RC-3,RC-4          --   --  --    8          8          8          2     +0     -6  Repository Access Mediation
+L-006  Condition  Amplifier AN-1,AN-3     RC-3               --   --  --    8          8          8          2     +0     -6  Repository Access Mediation
+L-007  Frequency  -         AN-1,AN-5     RC-5                8    5   5    8          5          5          5     +0     +0  
+L-008  Condition  Enabler   AN-1          RC-3               --   --  --    5          5          5          5     +0     +0  Fabrication Job Authorization
+L-009  Frequency  -         AN-1          RC-3                2    2   2    5          2          2          2     +0     +0  
+L-010  Condition  Enabler   AN-1          RC-3,RC-4          --   --  --    5          5          5          5     +0     +0  Fabrication Artifact Verification
+L-011  Frequency  -         AN-1          RC-3,RC-4           8    5   5    5          5          5          5     +0     +0  
+L-012  Condition  Amplifier AN-1          RC-3               --   --  --   10         10         10          2     +0     -8  Fabrication Job Authorization
+L-013  Condition  Amplifier AN-1          RC-4               --   --  --    8          8          8          2     +0     -6  Fabrication Job Authorization
+L-014  Condition  Amplifier AN-1          RC-3               --   --  --   10         10          8          2     -2     -8  Ingest Mediation
+L-015  Condition  Amplifier AN-1          RC-5               --   --  --    8          8          8          2     +0     -6  Version Authority
+L-016  Condition  Amplifier AN-1          RC-3               --   --  --    8          8          5          5     -3     -3  Fabrication Activity Recording
+L-017  Frequency  -         AN-1          RC-3               10    8  10   10         10         10         10     +0     +0  
+L-018  Frequency  -         AN-1          RC-3                5   10   8   10         10         10         10     +0     +0  
+L-019  Frequency  -         AN-3          RC-2,RC-4           2    8   5    8          5          5          5     +0     +0  
+L-020  Frequency  -         AN-3          RC-2                2    8   5    8          5          5          5     +0     +0  
+L-021  Frequency  -         AN-3          RC-2,RC-6           5    8   5    8          5          5          5     +0     +0  
+L-022  Frequency  -         AN-3          RC-2                2    8   5    8          5          5          5     +0     +0  
+L-023  Frequency  -         AN-3          RC-2                5    8   5    8          5          5          5     +0     +0  
+L-024  Condition  Enabler   AN-3          RC-3,RC-8          --   --  --    5          5          5          0     +0     -5  Repository Access Mediation
+L-025  Condition  Enabler   AN-3          RC-3,RC-8          --   --  --    5          5          5          0     +0     -5  Repository Access Mediation
+L-026  Condition  Enabler   AN-3          RC-3,RC-5          --   --  --    8          8          8          2     +0     -6  Repository Access Mediation
+L-027  Condition  Amplifier AN-3          RC-3,RC-4          --   --  --   10         10          8          2     -2     -8  Ingest Mediation
+L-028  Condition  Amplifier AN-3,AN-5     RC-5,RC-8          --   --  --    8          8          5          2     -3     -6  Repository Change Detection
+L-029  Condition  Amplifier AN-3,AN-5     RC-5,RC-8          --   --  --    5          5          5          0     +0     -5  Operator Attribution
+L-030  Condition  Amplifier AN-3          RC-8               --   --  --   10         10         10          2     +0     -8  Repository Access Mediation
+L-031  Condition  Amplifier AN-3          RC-4,RC-8          --   --  --    8          8          5          2     -3     -6  Repository Change Detection
+L-032  Frequency  -         AN-5          RC-5               10    2   5    5          5          5          5     +0     +0  
+L-033  Condition  Enabler   AN-5          RC-5,RC-8          --   --  --    8          8          8          2     +0     -6  Version Authority
+L-034  Condition  Amplifier AN-5          RC-5,RC-8          --   --  --   10         10          8          2     -2     -8  Version Authority
+L-035  Condition  Amplifier AN-5          RC-5               --   --  --    8          8          8          2     +0     -6  Version Authority
+L-036  Frequency  -         AN-5          RC-5                8    2   5    5          5          5          5     +0     +0  
+L-037  Condition  Amplifier AN-5          RC-4,RC-5          --   --  --    5          5          5          0     +0     -5  Version Authority
+L-038  Condition  Amplifier AN-5          RC-5               --   --  --    5          5          5          0     +0     -5  Version Authority
+L-039  Condition  Amplifier AN-5          RC-5               --   --  --    5          5          5          0     +0     -5  Version Authority
+L-040  Frequency  -         AN-5          RC-5                5    5   5    8          5          5          5     +0     +0  
+L-041  Condition  Amplifier AN-5          RC-5               --   --  --    2          2          2          0     +0     -2  Version Authority
+L-042  Condition  Amplifier AN-5          RC-5               --   --  --    5          5          5          0     +0     -5  Repository Access Mediation
+L-043  Condition  Amplifier AN-5          RC-5               --   --  --    8          8          8          2     +0     -6  Fabrication Job Authorization
+L-044  Frequency  -         AN-7          RC-7                2    5   2    5         --         --          2     --     --  
+L-045  Frequency  -         AN-7          RC-7                5    5   5    5         --         --          5     --     --  
+L-046  Frequency  -         AN-7          RC-7                5    5   5    5         --         --          5     --     --  
+L-047  Frequency  -         AN-7          RC-7                5    5   5    8         --         --          5     --     --  
+L-048  Frequency  -         AN-7          RC-7                0    5   2    5         --         --          2     --     --  
+L-049  Frequency  -         AN-7          RC-7                5    2   2    2         --         --          2     --     --  
+L-050  Frequency  -         AN-7          RC-7               10    5   8    5         --         --          5     --     --  
+L-051  Frequency  -         AN-7          RC-7                5    5   5    5         --         --          5     --     --  
+L-052  Condition  Enabler   AN-7          RC-7               --   --  --    5         --         --          5     --     --  
+L-053  Condition  Enabler   AN-7          RC-7               --   --  --    5         --         --          5     --     --  Fabrication Job Authorization
+L-054  Frequency  -         AN-7          RC-7,RC-3           8    5   5    8         --         --          5     --     --  
+L-055  Condition  Enabler   AN-7          RC-7               --   --  --    5         --         --          5     --     --  
+L-056  Condition  Amplifier AN-7          RC-7               --   --  --    8         --         --          2     --     --  Degraded-Mode Operation
+L-057  Condition  Amplifier AN-7          RC-7               --   --  --    8         --         --          2     --     --  Degraded-Mode Operation
+L-058  Condition  Amplifier AN-7          RC-7               --   --  --    5         --         --          0     --     --  Degraded-Mode Operation
+L-059  Condition  Amplifier AN-7          RC-7               --   --  --    5         --         --          0     --     --  Degraded-Mode Operation
+L-060  Condition  Amplifier AN-7          RC-7               --   --  --    8         --         --          2     --     --  Fabrication Activity Recording
+L-061  Condition  Enabler   AN-1          RC-3,RC-7          --   --  --    8          8          8          8     +0     +0  
+L-062  Condition  Enabler   AN-3          RC-3,RC-8          --   --  --    8          8          8          5     +0     -3  Operator Attribution
+L-063  Condition  Amplifier AN-1          RC-3,RC-5          --   --  --    8          8          8          8     +0     +0  
+L-064  Condition  Amplifier AN-1          RC-3,RC-4          --   --  --    8          8          5          5     -3     -3  Fabrication Activity Recording
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+TOTAL                                                                                309        291        220
+
+Per-leaf status by variant
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ID     Baseline                Observational           Mediated                
+L-001  Constant                Constant                Constant                
+L-002  Constant                Constant                Constant                
+L-003  Constant                Constant                Constant                
+L-004  Constant                Constant                Constant                
+L-005  Unaddressed             Unaddressed             Fully Addressed         
+L-006  Unaddressed             Unaddressed             Fully Addressed         
+L-007  Constant                Constant                Constant                
+L-008  Unaddressed             Unaddressed             Partially Addressed     
+L-009  Constant                Constant                Constant                
+L-010  Unaddressed             Partially Addressed     Partially Addressed     
+L-011  Constant                Constant                Constant                
+L-012  Unaddressed             Unaddressed             Fully Addressed         
+L-013  Unaddressed             Unaddressed             Fully Addressed         
+L-014  Unaddressed             Partially Addressed     Fully Addressed         
+L-015  Unaddressed             Unaddressed             Fully Addressed         
+L-016  Unaddressed             Partially Addressed     Partially Addressed     
+L-017  Constant                Constant                Constant                
+L-018  Constant                Constant                Constant                
+L-019  Constant                Constant                Constant                
+L-020  Constant                Constant                Constant                
+L-021  Constant                Constant                Constant                
+L-022  Constant                Constant                Constant                
+L-023  Constant                Constant                Constant                
+L-024  Unaddressed             Unaddressed             Fully Addressed         
+L-025  Unaddressed             Unaddressed             Fully Addressed         
+L-026  Unaddressed             Unaddressed             Fully Addressed         
+L-027  Unaddressed             Partially Addressed     Fully Addressed         
+L-028  Unaddressed             Partially Addressed     Fully Addressed         
+L-029  Unaddressed             Unaddressed             Fully Addressed         
+L-030  Unaddressed             Unaddressed             Fully Addressed         
+L-031  Unaddressed             Partially Addressed     Fully Addressed         
+L-032  Constant                Constant                Constant                
+L-033  Unaddressed             Unaddressed             Fully Addressed         
+L-034  Unaddressed             Partially Addressed     Fully Addressed         
+L-035  Unaddressed             Unaddressed             Fully Addressed         
+L-036  Constant                Constant                Constant                
+L-037  Unaddressed             Partially Addressed     Fully Addressed         
+L-038  Unaddressed             Unaddressed             Fully Addressed         
+L-039  Unaddressed             Unaddressed             Fully Addressed         
+L-040  Constant                Constant                Constant                
+L-041  Unaddressed             Unaddressed             Fully Addressed         
+L-042  Unaddressed             Unaddressed             Fully Addressed         
+L-043  Unaddressed             Unaddressed             Fully Addressed         
+L-044  N/A                     N/A                     Constant                
+L-045  N/A                     N/A                     Constant                
+L-046  N/A                     N/A                     Constant                
+L-047  N/A                     N/A                     Constant                
+L-048  N/A                     N/A                     Constant                
+L-049  N/A                     N/A                     Constant                
+L-050  N/A                     N/A                     Constant                
+L-051  N/A                     N/A                     Constant                
+L-052  N/A                     N/A                     Unaddressed             
+L-053  N/A                     N/A                     Partially Addressed     
+L-054  N/A                     N/A                     Constant                
+L-055  N/A                     N/A                     Unaddressed             
+L-056  N/A                     N/A                     Fully Addressed         
+L-057  N/A                     N/A                     Fully Addressed         
+L-058  N/A                     N/A                     Fully Addressed         
+L-059  N/A                     N/A                     Fully Addressed         
+L-060  N/A                     N/A                     Fully Addressed         
+L-061  Unaddressed             Unaddressed             Unaddressed             
+L-062  Unaddressed             Unaddressed             Partially Addressed     
+L-063  Unaddressed             Unaddressed             Unaddressed             
+L-064  Unaddressed             Partially Addressed     Partially Addressed     

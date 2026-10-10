@@ -1,0 +1,131 @@
+The Unknowingly Altered Print File (AN-1):
+GOAL: Fabricated part deviates from authoritative design, undetected
+│
+├─[AND] 1. Path A: deviation reaches the part via the submission path
+│  │
+│  ├─[OR] 1.1. Deviation introduced upstream of submission
+│  │  │
+│  │  ├─[OR] 1.1.1. On the workstation, before publication
+│  │  │  │
+│  │  │  ├─ L-001 Incorrect slicer profile or parameters applied [F]
+│  │  │  ├─ L-002 Incorrect or outdated source model selected [F]
+│  │  │  ├─ L-003 Deliberate modification by workstation-resident actor [F]
+│  │  │  └─ L-004 Slicer or toolchain component compromised [F]
+│  │  │
+│  │  ├─[OR] 1.1.2. In shared storage, after publication
+│  │  │  │
+│  │  │  ├─ L-005 Artifact written to repository outside mediated path [C]
+│  │  │  ├─ L-006 Artifact modified by compromised host with write access [C]
+│  │  │  └─ L-007 Artifact overwritten by another operator [F]
+│  │  │
+│  │  └─[OR] 1.1.3. In transit to fabrication equipment
+│  │       │
+│  │       ├─ L-008 Job content altered between submission and machine [C]
+│  │       └─ L-009 Content altered during manual media transfer [F]
+│  │
+│  ├─[AND] 1.2. Job is accepted and fabricated
+│  │  │
+│  │  ├─ L-012 Job accepted without integrity verification against manifest [C]
+│  │  └─ L-013 Equipment accepts job without provenance check [C]
+│  │
+│  └─[AND] 1.3. Deviation not detected on the submission path
+│       │
+│       ├─ L-014 No hash comparison against authoritative manifest [C]
+│       ├─ L-015 No version authority check at submission [C]
+│       ├─ L-016 No post-fabrication artifact reconciliation [C]
+│       ├─ L-017 Deviation below visual and dimensional inspection threshold [F]
+│       ├─ L-018 Part not functionally tested before issue [F]
+│       └─ L-063 Selected artifact is authentic but not the intended design [C]
+│
+└─[AND] 2. Path B: deviation reaches the part via direct load at the machine
+     │
+     ├─[OR] 2.1. Instruction placed on equipment-attached media
+     │  │
+     │  ├─ L-010 File placed on media outside the sanctioned path [C]
+     │  └─ L-011 Media carrying unknown content swapped between machines [F]
+     │
+     ├─ L-061 Machine accepts a locally initiated job, bypassing submission [C]
+     │
+     └─[AND] 2.2. Deviation not detected on the direct-load path
+          │
+          ├─ L-064 No artifact inventory verification on equipment media [C]
+          ├─ L-017 Deviation below visual and dimensional inspection threshold [F]
+          └─ L-018 Part not functionally tested before issue [F]
+
+The Downloaded Camera Mount (AN-3)
+GOAL: Repository contents altered or destroyed from workstation; undetected; unattributed.
+│
+├─[AND] 1. Adversary achieves execution on a workstation
+│  └─[OR] Initial access vector
+│       ├─ L-019 Malicious content retrieved from public model repository [F]
+│       ├─ L-020 Malicious content received by email [F]
+│       ├─ L-021 Software installed outside the validation process [F]
+│       ├─ L-022 Malicious content introduced via removable media [F]
+│       └─ L-023 Operator enables active content when prompted [F]
+│
+├─[AND] 2. Workstation holds unmediated access to the repository
+│  ├─ L-024 Direct network path exists from workstation to repository [C]
+│  ├─ L-025 Workstation holds write credentials to the repository [C]
+│  └─ L-026 Repository accepts writes without service mediation [C]
+│
+└─[AND] 3. The action is neither detected nor attributable
+     ├─ L-027 No integrity manifest exists for repository contents [C]
+     ├─ L-028 No change detection on the repository [C]
+     ├─ L-029 Repository writes not attributable to an individual [C]
+     ├─ L-030 Backup reachable within the same credential scope [C]
+     └─ L-031 Affected artifact set cannot be enumerated after the fact [C]
+
+The Unattributed and Overwritten Design File (AN-5)
+GOAL: Authoritative design artifact lost or unidentifiable.
+│
+├─[OR] 1. Path to loss
+│   │
+│   ├─[AND] 1.1 Overwrite destroys the authoritative version
+│   │  ├─ L-032 Two or more operators hold divergent working copies [F]
+│   │  ├─ L-033 Repository permits in-place overwrite [C]
+│   │  ├─ L-034 Prior version not retained on write [C]
+│   │  ├─ L-035 No write-conflict detection at publication [C]
+│   │  └─ L-036 Operator unaware a newer version exists [F]
+│   │
+│   └─[AND] 1.2 Authoritative version exists but cannot be identified
+│        ├─ L-037 No version metadata attached to stored artifacts [C]
+│        ├─ L-038 No supersession record between versions [C]
+│        ├─ L-039  No query for the current authoritative version [C]
+│        └─ L-040  Originating operator unavailable (personnel turnover) [F]
+│
+└─[AND] 2. The loss is not detected in time to recover
+     ├─ L-028 No change detection on the repository [C] (shared, AN-3)
+     ├─ L-029 Repository writes not attributable to an individual [C] (shared, AN-3)
+     ├─ L-041 No notification to the prior author on overwrite [C]
+     ├─ L-042 Version currency not checked at retrieval [C]
+     └─ L-043 Version currency not checked at job submission [C]
+
+The Mediating Service Outage (AN-7)
+GOAL: Fabrication proceeds unmediated and unrecorded during outage.
+│
+├─[AND] 1. The mediating service becomes unavailable
+│  └─[OR] Cause
+│       ├─ L-044 Hardware failure of the hosting platform [F]
+│       ├─ L-045 Software fault or resource exhaustion [F]
+│       ├─ L-046 Network partition between service and equipment [F]
+│       ├─ L-047 Storage media failure on the hosting platform [F]
+│       └─ L-048 Deliberate denial of the service by an insider [F]
+│
+├─[AND] 2. Operational pressure requires fabrication to continue
+│  ├─ L-049 Fabrication task deadline falls within the support window [F]
+│  ├─ L-050 No on-site support available to restore service [F]
+│  └─ L-051 Remote support latency exceeds deadline margin [F]
+│
+├─[AND] 3. A bypass path is available and used
+│  └─[OR] Path
+│       ├─ L-052 Physical media path to equipment remains open [C]
+│       ├─ L-053 Direct network path to equipment restorable by operator [C]
+│       ├─ L-054 Personal device used to prepare fabrication instructions [F]
+│       └─ L-055 Equipment front panel accepts locally initiated jobs [C]
+│
+└─[AND] 4. The bypass produces no record
+     ├─ L-056 No break-glass procedure defined [C]
+     ├─ L-057 Break-glass authorization not time-limited [C]
+     ├─ L-058 Bypass action not logged [C]
+     ├─ L-059 Bypass not reported on service restoration [C]
+     └─ L-060 No reconciliation of fabrication activity after restoration [C]
