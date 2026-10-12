@@ -1,0 +1,42 @@
+{% extends "base.html" %}{% block title %}Event log — fabguard{% endblock %}
+{% block body %}
+<h1>Append-only event log</h1>
+<div class="panel">
+  <p>
+    {% if chain.ok %}<span class="chain-ok">Chain intact</span>
+    {% else %}<span class="chain-bad">CHAIN BROKEN</span> — {{ chain.reason }}
+      (first bad record: seq {{ chain.first_bad_seq }}){% endif %}
+    <span class="soft">· {{ stats.count }} records ·
+      {{ stats.first_ts }} → {{ stats.last_ts }}</span>
+  </p>
+  <p class="small muted mono">{{ stats.path }}</p>
+  <p class="small soft">Each record carries the hash of the one before it, so removing,
+    reordering or editing any record breaks every link after it. A clean verification
+    means nothing was altered since it was written — not that what was written was true.</p>
+  <form method="post" action="{{ url_for('verify_chain') }}" class="inline">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button class="primary">Verify chain</button></form>
+  <a class="btn" href="{{ url_for('events', limit=1000) }}">Show 1000</a>
+</div>
+
+<div class="panel">
+<table>
+  <tr><th>Seq</th><th>When</th><th>Actor</th><th>Feature</th><th>Kind</th>
+      <th>Subject</th><th>Data</th><th>Hash</th></tr>
+  {% for r in records %}
+  <tr>
+    <td class="mono small">{{ r.seq }}</td>
+    <td class="nowrap small">{{ r.ts }}</td>
+    <td class="small"><strong>{{ r.actor }}</strong></td>
+    <td class="small mono">{{ r.feature }}</td>
+    <td class="small mono">{{ r.kind }}</td>
+    <td class="small mono">{{ r.subject }}</td>
+    <td style="max-width:420px">
+      {% if r.data %}<details><summary>{{ r.data.keys()|list|join(', ')|truncate(60) }}</summary>
+        <pre>{{ r.data | pretty }}</pre></details>{% endif %}</td>
+    <td class="mono small muted">{{ r.hash | shorthash }}</td>
+  </tr>
+  {% else %}<tr><td colspan="8" class="muted">Log is empty.</td></tr>{% endfor %}
+</table>
+</div>
+{% endblock %}

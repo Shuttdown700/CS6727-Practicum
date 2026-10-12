@@ -1,0 +1,44 @@
+{% extends "base.html" %}{% block title %}Repository — fabguard{% endblock %}
+{% block body %}
+<h1>Repository change detection</h1>
+<p class="small soft">{{ entries }} file(s) currently tracked on the share. Changes are
+observed by comparing snapshots, so a change made and reverted between two passes is
+never seen — and a mounted CIFS share exposes no SMB audit trail, so no change here
+carries an actor. That missing actor <em>is</em> the attribution gap.</p>
+
+<div class="panel">
+  <h2 style="margin-top:0">Snapshots</h2>
+  <table>
+    <tr><th>When</th><th>Files</th><th>Bytes</th><th>Added</th><th>Modified</th>
+        <th>Deleted</th><th>Took</th></tr>
+    {% for s in snapshots %}
+    <tr><td class="nowrap small">{{ s.ts }}</td>
+        <td class="small">{{ '{:,}'.format(s.file_count) }}</td>
+        <td class="small">{{ '{:,}'.format(s.byte_count) }}</td>
+        <td>{% if s.added %}<span class="pill ADDED">{{ s.added }}</span>{% else %}—{% endif %}</td>
+        <td>{% if s.modified %}<span class="pill MODIFIED">{{ s.modified }}</span>{% else %}—{% endif %}</td>
+        <td>{% if s.deleted %}<span class="pill DELETED">{{ s.deleted }}</span>{% else %}—{% endif %}</td>
+        <td class="small nowrap">{{ '%.1fs' % s.duration_s if s.duration_s else '' }}</td></tr>
+    {% else %}<tr><td colspan="7" class="muted">No snapshots yet.</td></tr>{% endfor %}
+  </table>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Change history</h2>
+  <table>
+    <tr><th>When</th><th>Change</th><th>Path</th><th>Was</th><th>Now</th><th>Size</th></tr>
+    {% for c in changes %}
+    <tr><td class="nowrap small">{{ c.ts }}</td>
+        <td><span class="pill {{ c.change }}">{{ c.change }}</span></td>
+        <td class="small">{{ c.path }}</td>
+        <td class="mono small">{{ c.old_sha256 | shorthash or '—' }}</td>
+        <td class="mono small">{{ c.new_sha256 | shorthash or '—' }}</td>
+        <td class="small nowrap">
+          {% if c.old_size is not none and c.new_size is not none %}
+            {{ '{:,}'.format(c.old_size) }} → {{ '{:,}'.format(c.new_size) }}
+          {% elif c.new_size is not none %}{{ '{:,}'.format(c.new_size) }}
+          {% elif c.old_size is not none %}{{ '{:,}'.format(c.old_size) }}{% endif %}</td></tr>
+    {% else %}<tr><td colspan="6" class="muted">No changes recorded.</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}{% block title %}Custody — fabguard{% endblock %}
+{% block body %}
+<h1>Artifact Custody Recording</h1>
+<p class="small soft">Who retrieved which version of which artifact, and when. The
+record that makes an artifact later found outside the controlled environment
+traceable to a named custody event rather than to nothing at all.</p>
+
+<div class="panel">
+  <form method="get" class="inline">
+    <label class="small soft">Operator</label>
+    <select name="operator" style="padding:.3rem;border:1px solid var(--line);border-radius:5px">
+      <option value="">anyone</option>
+      {% for o in operators %}<option value="{{ o }}" {{ 'selected' if o==operator }}>{{ o }}</option>{% endfor %}
+    </select>
+    <label class="small soft" style="margin-left:1rem">SHA-256</label>
+    <input type="text" name="sha256" value="{{ sha256 }}" placeholder="full hash — who had this artifact?" style="min-width:22rem">
+    <button class="primary">Filter</button>
+    <a class="btn" href="{{ url_for('custody') }}">Clear</a>
+  </form>
+  {% if sha256 %}<p class="small soft" style="margin-bottom:0">Every custody event for
+    <code>{{ sha256[:24] }}…</code> — the question asked when an artifact turns up
+    somewhere it should not be.</p>{% endif %}
+</div>
+
+<div class="panel">
+<table>
+  <tr><th>When</th><th>Operator</th><th>Device</th><th>Action</th><th>Artifact</th>
+      <th>Version</th><th>SHA-256</th><th>Purpose</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td class="nowrap small">{{ r.ts }}</td>
+    <td class="small"><strong>{{ r.operator }}</strong></td>
+    <td class="small mono">{{ r.device or '' }}</td>
+    <td><span class="pill {{ {'PUBLISH':'ADDED','RETRIEVE':'NOTICE','SUBMIT':'WARNING','STAGE':'INFO'}.get(r.action,'INFO') }}">{{ r.action }}</span></td>
+    <td class="small">{{ r.design_name or r.name or '' }}
+      {% if r.repo_path %}<br><span class="muted mono">{{ r.repo_path }}</span>{% endif %}</td>
+    <td class="small">{% if r.version_no %}v{{ r.version_no }}{% endif %}</td>
+    <td class="mono small">{{ r.sha256 | shorthash }}</td>
+    <td class="small">{{ r.purpose or '' }}</td>
+  </tr>
+  {% else %}<tr><td colspan="8" class="muted">No custody events.</td></tr>{% endfor %}
+</table>
+</div>
+<p class="small muted">Custody recording answers "who had it". It does not and cannot
+answer "where did it go" — local retention after retrieval is endpoint territory and
+outside this solution's scope by design.</p>
+{% endblock %}

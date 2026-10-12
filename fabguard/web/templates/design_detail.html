@@ -1,0 +1,56 @@
+{% extends "base.html" %}{% block title %}{{ design.name }} — fabguard{% endblock %}
+{% block body %}
+<h1>{{ design.name }}</h1>
+<p class="small soft mono">{{ design.repo_path }} · created by {{ design.created_by }}
+  on {{ design.created_ts }}</p>
+
+<div class="panel">
+  <h2 style="margin-top:0">Version history</h2>
+  <table>
+    <tr><th>Version</th><th>SHA-256</th><th>Size</th><th>Published by</th>
+        <th>Note</th><th>Supersedes</th><th>Retrieve</th><th>Revert</th></tr>
+    {% for v in versions %}
+    <tr {% if current and v.id==current.id %}style="background:#eef6ff"{% endif %}>
+      <td class="nowrap"><strong>v{{ v.version_no }}</strong>
+        {% if current and v.id==current.id %}<span class="pill AUTHORIZED">current</span>{% endif %}
+        {% if v.reverted_from_id %}<br><span class="pill INFO">revert</span>{% endif %}</td>
+      <td class="mono small">{{ v.sha256 | shorthash }}</td>
+      <td class="small nowrap">{{ '{:,}'.format(v.size) }}</td>
+      <td class="small">{{ v.published_by }}<br><span class="muted">{{ v.published_ts }}</span></td>
+      <td class="small">{{ v.note or '' }}</td>
+      <td class="small">{% if v.supersedes_id %}version #{{ v.supersedes_id }}{% else %}—{% endif %}</td>
+      <td>
+        <form method="post" action="{{ url_for('retrieve_version', did=design.id, vid=v.id) }}" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="text" name="purpose" placeholder="purpose">
+          <button>Retrieve</button></form></td>
+      <td>
+        {% if not (current and v.id==current.id) %}
+        <form method="post" action="{{ url_for('revert_design', did=design.id, vid=v.id) }}" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="text" name="reason" placeholder="reason">
+          <button class="danger">Revert to this</button></form>
+        {% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="small muted">Retrieving a version that is not current is allowed and
+    recorded as such — there are good reasons to pull an old one, and the record is
+    what makes it a deliberate act rather than an accident.</p>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Custody for this design</h2>
+  <table>
+    <tr><th>When</th><th>Operator</th><th>Device</th><th>Action</th><th>Version</th><th>Purpose</th></tr>
+    {% for c in custody %}
+    <tr><td class="nowrap small">{{ c.ts }}</td>
+        <td class="small"><strong>{{ c.operator }}</strong></td>
+        <td class="small mono">{{ c.device or '' }}</td>
+        <td><span class="pill {{ 'ADDED' if c.action=='PUBLISH' else 'NOTICE' }}">{{ c.action }}</span></td>
+        <td class="small">v{{ c.version_no }}</td>
+        <td class="small">{{ c.purpose or '' }}</td></tr>
+    {% else %}<tr><td colspan="6" class="muted">No custody events.</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

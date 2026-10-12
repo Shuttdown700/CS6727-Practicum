@@ -1,0 +1,35 @@
+{% extends "base.html" %}{% block title %}Findings — fabguard{% endblock %}
+{% block body %}
+<h1>Findings</h1>
+<p><a class="btn" href="{{ url_for('findings', all='1' if not show_all else None) }}">
+  {{ 'Show open only' if show_all else 'Include acknowledged' }}</a></p>
+<div class="panel">
+<table>
+  <tr><th>Sev</th><th>When</th><th>Feature</th><th>Subject</th><th>Summary</th>
+      <th>Detail</th><th>Status</th></tr>
+  {% for f in findings %}
+  <tr>
+    <td><span class="pill {{ f.severity }}">{{ f.severity }}</span></td>
+    <td class="nowrap small">{{ f.ts }}</td>
+    <td class="small mono">{{ f.feature }}</td>
+    <td class="small mono">{{ f.subject }}</td>
+    <td>{{ f.summary }}<br><span class="small muted mono">{{ f.kind }}</span></td>
+    <td style="max-width:360px">
+      {% if f.detail_obj %}
+      <details><summary>detail</summary><pre>{{ f.detail_obj | pretty }}</pre></details>
+      {% endif %}</td>
+    <td class="nowrap">
+      {% if f.acknowledged_ts %}
+        <span class="small">ack by <strong>{{ f.acknowledged_by }}</strong><br>
+        <span class="muted">{{ f.acknowledged_ts }}</span></span>
+      {% else %}
+        <form method="post" action="{{ url_for('ack_finding', fid=f.id) }}" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="text" name="note" placeholder="note (optional)">
+          <button>Acknowledge</button></form>
+      {% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="7" class="muted">None.</td></tr>{% endfor %}
+</table>
+</div>
+{% endblock %}

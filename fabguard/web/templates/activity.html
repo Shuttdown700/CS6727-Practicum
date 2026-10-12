@@ -1,0 +1,55 @@
+{% extends "base.html" %}{% block title %}Activity — fabguard{% endblock %}
+{% block body %}
+<h1>Fabrication activity</h1>
+<p class="small soft">The only record of what these machines produced. A Prusa MK4
+keeps no job history, and nothing at the enterprise layer records one — so anything
+that happened between two polls is not here, and cannot be.</p>
+
+<div class="panel">
+  <h2 style="margin-top:0">Observed jobs</h2>
+  <table>
+    <tr><th>Machine</th><th>File</th><th>Size</th><th>First seen</th><th>Last seen</th>
+        <th>Ended</th><th>Authorization</th></tr>
+    {% for j in jobs %}
+    <tr>
+      <td class="mono small">{{ j.printer_id }}</td>
+      <td>{{ j.file_name or '—' }}<br><span class="small muted mono">{{ j.file_path or '' }}</span></td>
+      <td class="nowrap small">{{ '{:,}'.format(j.file_size) if j.file_size else '—' }}</td>
+      <td class="nowrap small">{{ j.first_seen_ts }}</td>
+      <td class="nowrap small">{{ j.last_seen_ts }}</td>
+      <td class="nowrap small">{{ j.end_state or 'running' }}</td>
+      <td>{% if j.authorized %}<span class="pill AUTHORIZED">AUTHORIZED</span>
+             <span class="small mono">{{ j.authorization_ref }}</span>
+          {% else %}<span class="pill CRITICAL">UNRECONCILED</span>{% endif %}</td>
+    </tr>
+    {% else %}<tr><td colspan="7" class="muted">No jobs observed yet.</td></tr>{% endfor %}
+  </table>
+  <p class="small muted">Every job reads as unreconciled while no authorization
+  source exists — that is the observational variant working as designed, not a
+  defect. It can see that something was made; it cannot say it was allowed.</p>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Recent samples</h2>
+  <table>
+    <tr><th>When</th><th>Machine</th><th>State</th><th>Job</th><th>Progress</th>
+        <th>Nozzle</th><th>Bed</th><th></th></tr>
+    {% for s in samples %}
+    <tr>
+      <td class="nowrap small">{{ s.ts }}</td>
+      <td class="mono small">{{ s.printer_id }}</td>
+      <td class="nowrap"><strong class="small">{{ s.state or '—' }}</strong></td>
+      <td class="small">{{ s.job_file or '' }}</td>
+      <td style="min-width:90px">
+        {% if s.progress is not none %}
+          <div class="bar"><i style="width:{{ s.progress }}%"></i></div>
+          <span class="small muted">{{ '%.0f' % s.progress }}%</span>
+        {% endif %}</td>
+      <td class="small nowrap">{{ '%.1f' % s.temp_nozzle if s.temp_nozzle is not none else '—' }}</td>
+      <td class="small nowrap">{{ '%.1f' % s.temp_bed if s.temp_bed is not none else '—' }}</td>
+      <td><details><summary>raw</summary><pre>{{ s.raw | pretty }}</pre></details></td>
+    </tr>
+    {% else %}<tr><td colspan="8" class="muted">No samples yet.</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

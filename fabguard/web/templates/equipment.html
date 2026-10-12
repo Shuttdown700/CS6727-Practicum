@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% block title %}Equipment — fabguard{% endblock %}
+{% block body %}
+<h1>Equipment configuration inventory</h1>
+<p class="small soft">What is on the fabrication segment, what firmware it runs, and
+how that changed over time. The sweep is a TCP connect probe, so it runs unprivileged
+and finds only hosts with an open port from the configured list — it is not exhaustive.</p>
+
+{% for e in equipment %}
+<div class="panel">
+  <h2 style="margin-top:0">
+    {{ e.printer_id or e.hostname or e.ip }}
+    {% if e.present %}<span class="pill ok">present</span>
+    {% else %}<span class="pill INFO">absent</span>{% endif %}
+    {% if e.kind == 'UNKNOWN_HOST' %}<span class="pill WARNING">undeclared</span>{% endif %}
+  </h2>
+  <p class="small soft mono">
+    {{ e.ip }}{% if e.mac %} · {{ e.mac }}{% endif %}{% if e.hostname %} · {{ e.hostname }}{% endif %}
+    · first seen {{ e.first_seen_ts }} · last seen {{ e.last_seen_ts }}</p>
+  <table>
+    <tr><th>Recorded</th><th>Firmware</th><th>API</th><th>Serial</th><th>Nozzle</th>
+        <th>Open ports</th><th></th></tr>
+    {% for c in e.configs %}
+    <tr><td class="nowrap small">{{ c.ts }}</td>
+        <td class="small">{{ c.firmware or '—' }}</td>
+        <td class="small">{{ c.api_version or '—' }}</td>
+        <td class="small mono">{{ c.serial or '—' }}</td>
+        <td class="small">{{ c.nozzle or '—' }}</td>
+        <td class="small mono">{{ c.open_ports or '[]' }}</td>
+        <td><details><summary>raw</summary><pre>{{ c.raw | pretty }}</pre></details></td></tr>
+    {% else %}<tr><td colspan="7" class="muted">No configuration recorded.</td></tr>{% endfor %}
+  </table>
+  <p class="small muted">A row appears only when the configuration changed, so this is a
+  change history rather than a poll log.</p>
+</div>
+{% else %}
+<div class="panel"><p class="muted">No equipment inventoried yet. Run the
+  Equipment Configuration Inventory collector from the dashboard.</p></div>
+{% endfor %}
+{% endblock %}

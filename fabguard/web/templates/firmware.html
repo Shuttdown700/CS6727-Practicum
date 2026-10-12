@@ -1,0 +1,87 @@
+{% extends "base.html" %}{% block title %}Firmware — fabguard{% endblock %}
+{% block body %}
+<h1>Firmware Staging</h1>
+<p class="small soft">Firmware updates are currently unsanctioned and undocumented.
+This records the image, stages it with a read-back hash check, and logs the
+operator-declared application alongside the version the machine actually reports.</p>
+
+<div class="banner warn">
+  <strong>The service does not flash the printer.</strong> Applying firmware on an MK4
+  is a physical act at the panel, and a service that could remotely re-flash every
+  machine on the segment would be a far more attractive target than one that cannot.
+  So "applied" is a <em>claim</em> by an operator plus an <em>observation</em> of what
+  the machine reports afterwards. A disagreement between the two is a finding.
+</div>
+
+<div class="grid g2">
+  <div class="panel">
+    <h2 style="margin-top:0">Record an image</h2>
+    <form method="post" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="record">
+      <p><label class="small soft">Firmware (.bbf)</label><br><input type="file" name="image"></p>
+      <p><label class="small soft">Version label</label>
+         <input type="text" name="version_label" placeholder="6.2.0"></p>
+      <p><label class="small soft">Where from, and how checked?</label>
+         <input type="text" name="note" placeholder="prusa3d.com, hash checked against the site"></p>
+      <p><button class="primary">Record</button></p>
+    </form>
+    <p class="small muted">Verification is against the image <em>you recorded</em>, not
+      against a vendor signature — Prusa's .bbf signing is not a published interface
+      this prototype can check. Integrity, not authenticity.</p>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">Stage / declare applied</h2>
+    {% if not images %}<p class="muted">Record an image first.</p>{% else %}
+    <form method="post">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <p><label class="small soft">Image</label>
+        <select name="firmware_id" style="width:100%;padding:.35rem;border:1px solid var(--line);border-radius:5px">
+          {% for i in images %}<option value="{{ i.id }}">{{ i.name }}
+            {% if i.version_label %}({{ i.version_label }}){% endif %}
+            — {{ i.sha256[:12] }}</option>{% endfor %}
+        </select></p>
+      <p><label class="small soft">Machine</label>
+        <select name="printer_id" style="width:100%;padding:.35rem;border:1px solid var(--line);border-radius:5px">
+          {% for p in printers %}<option value="{{ p.id }}">{{ p.label }}</option>{% endfor %}
+        </select></p>
+      <p><input type="text" name="note" placeholder="note"></p>
+      <p><button class="primary" name="action" value="stage">Stage + verify</button>
+         <button name="action" value="applied">I applied it at the panel</button></p>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Recorded images</h2>
+  <table>
+    <tr><th>Image</th><th>Label</th><th>SHA-256</th><th>Size</th><th>Recorded by</th><th>Note</th></tr>
+    {% for i in images %}
+    <tr><td class="small">{{ i.name }}</td><td class="small">{{ i.version_label or '—' }}</td>
+        <td class="mono small">{{ i.sha256 | shorthash }}</td>
+        <td class="small nowrap">{{ '{:,}'.format(i.size) }}</td>
+        <td class="small">{{ i.recorded_by }}<br><span class="muted">{{ i.recorded_ts }}</span></td>
+        <td class="small">{{ i.note or '' }}</td></tr>
+    {% else %}<tr><td colspan="6" class="muted">None.</td></tr>{% endfor %}
+  </table>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Firmware event log</h2>
+  <table>
+    <tr><th>When</th><th>Operator</th><th>Machine</th><th>Action</th><th>Image</th>
+        <th>Result</th><th>Machine reported</th></tr>
+    {% for e in events %}
+    <tr><td class="nowrap small">{{ e.ts }}</td>
+        <td class="small"><strong>{{ e.operator }}</strong></td>
+        <td class="small mono">{{ e.printer_id }}</td>
+        <td><span class="pill {{ {'VERIFIED':'AUTHORIZED','STAGED':'NOTICE','FAILED':'ALTERED','APPLY_DECLARED':'WARNING'}.get(e.action,'INFO') }}">{{ e.action }}</span></td>
+        <td class="small">{{ e.firmware_name }}</td>
+        <td class="small">{{ e.result or '' }}</td>
+        <td class="small mono">{{ e.observed_firmware or '' }}</td></tr>
+    {% else %}<tr><td colspan="7" class="muted">No firmware events.</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

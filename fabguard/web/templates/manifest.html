@@ -1,0 +1,35 @@
+{% extends "base.html" %}{% block title %}Manifest — fabguard{% endblock %}
+{% block body %}
+<h1>Authorized data manifest</h1>
+<p class="small soft">The reference every artifact verification is measured against.
+An empty manifest makes every artifact unrecognised, which is not a finding about
+the artifacts.</p>
+<div class="panel">
+<table>
+  <tr><th>Name</th><th>SHA-256</th><th>Size</th><th>Source</th><th>Approved by</th>
+      <th>Note</th><th>State</th></tr>
+  {% for m in rows %}
+  <tr {% if m.revoked %}style="opacity:.55"{% endif %}>
+    <td>{{ m.name or '—' }}</td>
+    <td class="mono small">{{ m.sha256 | shorthash }}</td>
+    <td class="nowrap small">{{ '{:,}'.format(m.size) if m.size else '—' }}</td>
+    <td class="small mono">{{ m.source_path or '' }}</td>
+    <td class="small"><strong>{{ m.approved_by }}</strong><br>
+        <span class="muted">{{ m.approved_ts }}</span></td>
+    <td class="small">{{ m.note or '' }}</td>
+    <td class="nowrap">
+      {% if m.revoked %}
+        <span class="pill INFO">REVOKED</span><br>
+        <span class="small muted">by {{ m.revoked_by }}<br>{{ m.revoked_ts }}</span>
+      {% else %}
+        <form method="post" action="{{ url_for('revoke_manifest', mid=m.id) }}" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="text" name="reason" placeholder="reason">
+          <button class="danger">Revoke</button></form>
+      {% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="7" class="muted">Manifest is empty. Approve an artifact
+    from the Artifacts page to give verification a reference.</td></tr>{% endfor %}
+</table>
+</div>
+{% endblock %}

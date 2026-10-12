@@ -1,0 +1,89 @@
+{% extends "base.html" %}{% block title %}Jobs — fabguard{% endblock %}
+{% block body %}
+<h1>Fabrication Job Authorization</h1>
+<p class="small soft">The sole authorized mechanism for putting work on a machine.
+The authorization row is written <em>before</em> the transfer, so a job found on a
+machine after a crash is still explainable.</p>
+
+<div class="panel">
+  <h2 style="margin-top:0">Submit a job</h2>
+  <form method="post">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="grid g2">
+      <p><label class="small soft">Version to fabricate</label>
+        <select name="version_id" style="width:100%;padding:.35rem;border:1px solid var(--line);border-radius:5px">
+          {% for d in designs %}
+          <option value="{{ d.current_version_id }}">{{ d.name }} — v{{ d.current_version_no }} (current)</option>
+          {% endfor %}
+        </select></p>
+      <p><label class="small soft">Machine</label>
+        <select name="printer_id" style="width:100%;padding:.35rem;border:1px solid var(--line);border-radius:5px">
+          {% for p in printers %}<option value="{{ p.id }}">{{ p.label }} ({{ p.id }})</option>{% endfor %}
+        </select></p>
+    </div>
+    <p><label class="small soft">Note</label>
+       <input type="text" name="note" placeholder="what this is for"></p>
+    <p class="small">
+      <label><input type="checkbox" name="print_after"> start the print on upload</label>
+      &nbsp;&nbsp;
+      <label><input type="checkbox" name="allow_superseded"> allow a superseded version
+        <span class="muted">(recorded against you)</span></label></p>
+    <p><button class="primary">Authorize and transfer</button></p>
+  </form>
+  <p class="small muted">Refused unless the artifact is in the manifest. Fabricating a
+    superseded version needs the override — forbidding it outright would just get the
+    control routed around, so the choice is permitted and attributed instead.</p>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Authorizations</h2>
+  <table>
+    <tr><th>#</th><th>When</th><th>Status</th><th>Operator</th><th>Machine</th>
+        <th>Artifact</th><th>SHA-256</th><th>Matched</th><th>Note</th><th></th></tr>
+    {% for a in authorizations %}
+    <tr>
+      <td class="mono small">{{ a.id }}</td>
+      <td class="nowrap small">{{ a.ts }}</td>
+      <td><span class="pill {{ {'TRANSFERRED':'AUTHORIZED','AUTHORIZED':'NOTICE','FAILED':'ALTERED','CANCELLED':'INFO'}.get(a.status,'INFO') }}">{{ a.status }}</span></td>
+      <td class="small"><strong>{{ a.operator }}</strong>
+        {% if a.device %}<br><span class="muted mono">{{ a.device }}</span>{% endif %}</td>
+      <td class="small mono">{{ a.printer_id }}</td>
+      <td class="small">{{ a.file_name }}{% if a.version_no %}
+          <br><span class="muted">v{{ a.version_no }}</span>{% endif %}</td>
+      <td class="mono small">{{ a.sha256 | shorthash }}</td>
+      <td class="small">{% if a.matched_job_id %}<span class="pill AUTHORIZED">job #{{ a.matched_job_id }}</span>
+          {% else %}<span class="muted">not yet observed</span>{% endif %}</td>
+      <td class="small">{{ a.note or '' }}{% if a.error %}<br>
+          <span style="color:var(--crit)">{{ a.error }}</span>{% endif %}</td>
+      <td>{% if a.status in ('AUTHORIZED','TRANSFERRED') %}
+        <form method="post" action="{{ url_for('cancel_job', aid=a.id) }}" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <button>Cancel</button></form>{% endif %}</td>
+    </tr>
+    {% else %}<tr><td colspan="10" class="muted">No authorizations yet.</td></tr>{% endfor %}
+  </table>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Observed jobs, and how they reconciled</h2>
+  <table>
+    <tr><th>Machine</th><th>File</th><th>First seen</th><th>Ended</th><th>Verdict</th></tr>
+    {% for j in observed %}
+    <tr>
+      <td class="mono small">{{ j.printer_id }}</td>
+      <td class="small">{{ j.file_name or '—' }}</td>
+      <td class="nowrap small">{{ j.first_seen_ts }}</td>
+      <td class="small">{{ j.end_state or 'running' }}</td>
+      <td class="small">
+        {% if j.authorized %}<span class="pill AUTHORIZED">reconciled</span>
+          <span class="mono muted">{{ j.authorization_ref }}</span>
+        {% elif j.exception_id %}<span class="pill WARNING">under exception #{{ j.exception_id }}</span>
+        {% elif j.reconciled %}<span class="pill ALTERED">UNAUTHORIZED</span>
+        {% else %}<span class="pill NOTICE">pending</span>{% endif %}</td>
+    </tr>
+    {% else %}<tr><td colspan="5" class="muted">No fabrication observed yet.</td></tr>{% endfor %}
+  </table>
+  <p class="small muted">A job tagged to an exception is still unauthorized — the
+    exception accounts for it, it does not permit it.</p>
+</div>
+{% endblock %}

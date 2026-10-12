@@ -1,0 +1,67 @@
+{% extends "base.html" %}{% block title %}Ingest — fabguard{% endblock %}
+{% block body %}
+<h1>Ingest Mediation</h1>
+<p class="small soft">Technical data entering the governed workflow is quarantined,
+checked, hashed and recorded in the manifest with the origin you declare. Nothing
+reaches the repository or a machine without passing through here.</p>
+
+<div class="grid g2">
+  <div class="panel">
+    <h2 style="margin-top:0">Present an artifact</h2>
+    <form method="post" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <p><label class="small soft">File</label><br><input type="file" name="artifact"></p>
+      <p><label class="small soft">Where did this come from?</label>
+        <select name="origin" style="width:100%;padding:.35rem;border:1px solid var(--line);border-radius:5px">
+          {% for o in origins %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
+          <option value="__other__">Other (type below)</option>
+        </select></p>
+      <p><input type="text" name="origin_other" placeholder="if Other, describe"></p>
+      <p><label class="small soft">Note</label>
+         <input type="text" name="note" placeholder="optional"></p>
+      <p><button class="primary">Present for ingest</button></p>
+    </form>
+    <p class="small muted">The declared origin is <em>your claim</em>. The service
+      records who said it and when; it cannot verify it. That is what makes this
+      attribution rather than authentication — and why the claim is worth having.</p>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">What is checked</h2>
+    <ul class="small soft" style="padding-left:1.1rem;margin:.3rem 0">
+      <li><strong>3MF post-process scan (CVE-2023-47268).</strong> PrusaSlicer ≤ 2.6.1
+        executes a <code>post_process</code> directive embedded in a 3MF during
+        slicing. A 3MF from a public model repository is therefore command execution
+        against the workstation that opens it. Any 3MF carrying one is refused.</li>
+      <li><strong>Container sanity.</strong> A 3MF must open as a zip, and no member
+        path may escape the archive root.</li>
+      <li><strong>Extension allow-list and a size cap.</strong></li>
+    </ul>
+    <p class="small muted">Three specific checks, not general format normalisation.
+      A refused artifact stays in quarantine and the refusal is recorded.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Ingest history</h2>
+  <table>
+    <tr><th>When</th><th>Verdict</th><th>Artifact</th><th>SHA-256</th><th>Size</th>
+        <th>Declared origin</th><th>By</th><th>Detail</th></tr>
+    {% for r in records %}
+    <tr>
+      <td class="nowrap small">{{ r.ts }}</td>
+      <td><span class="pill {{ 'AUTHORIZED' if r.verdict=='ACCEPTED' else 'ALTERED' }}">{{ r.verdict }}</span></td>
+      <td class="small">{{ r.original_name }}</td>
+      <td class="mono small">{{ r.sha256 | shorthash }}</td>
+      <td class="small nowrap">{{ '{:,}'.format(r.size) }}</td>
+      <td class="small">{{ r.declared_origin }}{% if r.declared_note %}
+          <br><span class="muted">{{ r.declared_note }}</span>{% endif %}</td>
+      <td class="small"><strong>{{ r.operator }}</strong>
+          {% if r.device %}<br><span class="muted mono">{{ r.device }}</span>{% endif %}</td>
+      <td style="max-width:320px">
+        <details><summary>checks</summary><pre>{{ r.scan_result | pretty }}</pre></details></td>
+    </tr>
+    {% else %}<tr><td colspan="8" class="muted">Nothing presented yet.</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends "base.html" %}{% block title %}Dashboard — fabguard{% endblock %}
+{% block body %}
+<h1>Dashboard</h1>
+
+<div class="grid g4" style="margin-bottom:1rem">
+  <div class="tile {{ 'bad' if counts.findings_critical }}">
+    <div class="n">{{ counts.findings_open }}</div>
+    <div class="k">Open findings</div>
+    <div class="small soft">{{ counts.findings_critical }} critical</div></div>
+  <div class="tile {{ 'bad' if counts.jobs_unreconciled }}">
+    <div class="n">{{ counts.jobs_unreconciled }}</div>
+    <div class="k">Unreconciled jobs</div>
+    <div class="small soft">of {{ counts.jobs }} observed</div></div>
+  <div class="tile {{ 'bad' if counts.artifacts_bad }}">
+    <div class="n">{{ counts.artifacts_bad }}</div>
+    <div class="k">Suspect artifacts</div>
+    <div class="small soft">of {{ counts.artifacts }} on media</div></div>
+  <div class="tile"><div class="n">{{ counts.manifest }}</div>
+    <div class="k">Manifest entries</div>
+    <div class="small soft">{{ counts.repo_files }} files in repository</div></div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Append-only event log</h2>
+  <p>
+    {% if chain.ok %}<span class="chain-ok">Chain intact</span>
+    {% else %}<span class="chain-bad">CHAIN BROKEN</span> — {{ chain.reason }}
+      (first bad record: seq {{ chain.first_bad_seq }}){% endif %}
+    <span class="soft">· {{ logstats.count }} records</span>
+    {% if logstats.append_only_flag %}<span class="pill ok">chattr +a</span>
+    {% elif logstats.append_only_flag is sameas false %}
+      <span class="small muted">· kernel append-only flag not set
+        (<code>sudo chattr +a {{ logstats.path }}</code>)</span>{% endif %}
+  </p>
+  <form method="post" action="{{ url_for('verify_chain') }}" class="inline">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button>Verify chain now</button></form>
+  <a class="btn" href="{{ url_for('events') }}">Browse log</a>
+</div>
+
+<div class="grid g2">
+  <div class="panel">
+    <h2 style="margin-top:0">Collectors</h2>
+    <table>
+      <tr><th>Feature</th><th>Every</th><th>Last run</th><th>Result</th><th></th></tr>
+      {% for f in features %}
+      <tr>
+        <td><strong>{{ f.title }}</strong><br><span class="small muted mono">{{ f.name }}</span></td>
+        <td class="nowrap">{{ f.interval_s }}s</td>
+        <td class="nowrap small">{{ f.last_ts or '—' }}</td>
+        <td class="small">
+          {% if f.last_ok is sameas true %}{{ f.last_summary }}
+          {% elif f.last_ok is sameas false %}<span class="pill CRITICAL">FAILED</span>
+            <span class="small">{{ f.last_error }}</span>
+          {% else %}<span class="muted">not yet run</span>{% endif %}</td>
+        <td class="right">
+          <form method="post" action="{{ url_for('run_feature', feature=f.name) }}" class="inline">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <button>Run now</button></form></td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">Open findings</h2>
+    {% if not findings %}<p class="muted">Nothing outstanding.</p>{% endif %}
+    <table>
+      {% for f in findings %}
+      <tr>
+        <td class="nowrap"><span class="pill {{ f.severity }}">{{ f.severity }}</span></td>
+        <td>{{ f.summary }}<br>
+            <span class="small muted mono">{{ f.kind }} · {{ f.subject }} · {{ f.ts }}</span></td>
+        <td class="right">
+          <form method="post" action="{{ url_for('ack_finding', fid=f.id) }}" class="inline">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <button>Ack</button></form></td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% if findings %}<p><a class="btn" href="{{ url_for('findings') }}">All findings</a></p>{% endif %}
+  </div>
+</div>
+{% endblock %}

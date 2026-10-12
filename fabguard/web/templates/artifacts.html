@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% block title %}Artifacts — fabguard{% endblock %}
+{% block body %}
+<h1>Artifacts on equipment media</h1>
+<p class="small soft">
+  <span class="pill ALTERED">ALTERED</span> an approved name carrying unapproved contents —
+  the case a human glance at the filename will not catch.
+  <span class="pill UNRECOGNIZED">UNRECOGNIZED</span> in no manifest: technical data that
+  reached the machine by an unmediated path.
+  <span class="pill UNVERIFIED">UNVERIFIED</span> not hashed (type or size).
+</p>
+<div class="panel">
+<table>
+  <tr><th>Verdict</th><th>Machine</th><th>Storage</th><th>Path</th><th>Size</th>
+      <th>SHA-256</th><th>Last seen</th><th>Action</th></tr>
+  {% for a in rows %}
+  <tr>
+    <td><span class="pill {{ a.verdict }}">{{ a.verdict }}</span></td>
+    <td class="mono small">{{ a.printer_id }}</td>
+    <td class="mono small">{{ a.storage }}</td>
+    <td class="small">{{ a.path }}</td>
+    <td class="nowrap small">{{ '{:,}'.format(a.size) if a.size else '—' }}</td>
+    <td class="mono small">{{ a.sha256 | shorthash or '—' }}</td>
+    <td class="nowrap small">{{ a.last_seen_ts }}</td>
+    <td class="nowrap">
+      {% if a.sha256 and a.verdict in ('UNRECOGNIZED','ALTERED','UNVERIFIED') %}
+      <form method="post" action="{{ url_for('approve_artifact', aid=a.id) }}" class="inline">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="text" name="note" placeholder="why approved">
+        <button class="primary">Approve</button></form>
+      {% elif a.verdict == 'AUTHORIZED' %}<span class="small muted">in manifest</span>
+      {% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="8" class="muted">Nothing observed on media yet.</td></tr>{% endfor %}
+</table>
+</div>
+<p class="small muted">Approving records <em>your</em> account against the artifact's
+hash in the manifest and in the event log. You are asserting it is approved; the
+service only records who said so, and when.</p>
+{% endblock %}

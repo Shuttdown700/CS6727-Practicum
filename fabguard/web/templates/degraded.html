@@ -1,0 +1,110 @@
+{% extends "base.html" %}{% block title %}Break-glass — fabguard{% endblock %}
+{% block body %}
+<h1>Degraded-Mode Operation</h1>
+<p class="small soft">When the mediated path is unavailable, fabrication continues
+under a logged, time-limited, reported exception rather than halting. Availability is
+treated as a security property here: a control that stops mission-essential work gets
+bypassed, and a bypass nobody designed is a bypass nobody records.</p>
+
+{% if active_exception %}
+<div class="banner warn">
+  <strong>Exception #{{ active_exception.id }} is open</strong> until
+  {{ active_exception.expires_ts }} — opened by {{ active_exception.opened_by }}:
+  {{ active_exception.reason }}. Fabrication during this window is unmediated and
+  will be tagged to this exception.
+</div>
+{% endif %}
+
+<div class="grid g2">
+  <div class="panel">
+    <h2 style="margin-top:0">Open an exception</h2>
+    <form method="post">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="open">
+      <p><label class="small soft">Reason</label>
+        <select name="reason" style="width:100%;padding:.35rem;border:1px solid var(--line);border-radius:5px">
+          {% for r in reasons %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+          <option value="__other__">Other (type below)</option>
+        </select></p>
+      <p><input type="text" name="reason_other" placeholder="if Other, describe"></p>
+      <p><label class="small soft">Detail</label>
+         <input type="text" name="detail" placeholder="what is broken, and what has to go ahead anyway"></p>
+      <p><label class="small soft">Window (minutes, max {{ max_minutes }})</label>
+         <input type="text" name="minutes" value="{{ default_minutes }}"></p>
+      <p><label class="small soft">Retrospective start</label>
+         <input type="text" name="retrospective_from"
+                placeholder="2026-10-11T14:00:00Z — only if the service was already down"></p>
+      <p><button class="primary">Open exception</button></p>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">How this is meant to work</h2>
+    <p class="small soft"><strong>Prospective</strong> is the normal case: you see
+      trouble coming and open the window while the portal still works.</p>
+    <p class="small soft"><strong>Retrospective</strong> exists because "the service is
+      down" and "the service records an exception" cannot both be fully true at once.
+      A window opened after the fact is marked as such, because it is weaker evidence
+      than one opened at the time and the log should not blur the two.</p>
+    <p class="small soft"><strong>Time-limited is not decoration.</strong> An exception
+      that never expires is a disabled control with a nicer name. Overdue windows raise
+      a critical finding on their own.</p>
+    <p class="small soft"><strong>It accounts, it does not authorize.</strong> Jobs run
+      during a window stay unauthorized and get tagged to the exception, so the audit
+      record is continuous across the gap rather than silent.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Exceptions</h2>
+  <table>
+    <tr><th>#</th><th>Opened</th><th>By</th><th>Reason</th><th>Expires</th>
+        <th>State</th><th>Jobs in window</th><th>Actions</th></tr>
+    {% for e in exceptions %}
+    <tr>
+      <td class="mono small">{{ e.id }}</td>
+      <td class="nowrap small">{{ e.opened_ts }}</td>
+      <td class="small"><strong>{{ e.opened_by }}</strong>
+        {% if e.device %}<br><span class="muted mono">{{ e.device }}</span>{% endif %}</td>
+      <td class="small">{{ e.reason }}{% if e.detail %}<br>
+          <span class="muted">{{ e.detail }}</span>{% endif %}</td>
+      <td class="nowrap small">{{ e.expires_ts }}</td>
+      <td class="nowrap">
+        {% if e.closed_ts %}
+          <span class="pill INFO">closed</span>
+          {% if e.reconciled_ts %}<span class="pill AUTHORIZED">reconciled</span>
+          {% else %}<span class="pill WARNING">unreconciled</span>{% endif %}
+          <br><span class="small muted">by {{ e.closed_by }}<br>{{ e.closed_ts }}</span>
+        {% else %}<span class="pill ALTERED">OPEN</span>{% endif %}</td>
+      <td class="small">
+        {% if e.jobs %}{% for j in e.jobs %}<div class="mono">{{ j.file_name }}</div>{% endfor %}
+        {% else %}<span class="muted">none</span>{% endif %}</td>
+      <td class="nowrap">
+        {% if not e.closed_ts %}
+          <form method="post" class="inline">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="extend">
+            <input type="hidden" name="exception_id" value="{{ e.id }}">
+            <input type="text" name="minutes" value="60" style="width:4rem">
+            <input type="text" name="reason" placeholder="why">
+            <button>Extend</button></form>
+          <form method="post" class="inline" style="margin-top:.25rem">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="close">
+            <input type="hidden" name="exception_id" value="{{ e.id }}">
+            <input type="text" name="note" placeholder="what happened">
+            <label class="small"><input type="checkbox" name="reconciled"> reconciled</label>
+            <button class="primary">Close</button></form>
+        {% elif not e.reconciled_ts %}
+          <form method="post" class="inline">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="reconcile">
+            <input type="hidden" name="exception_id" value="{{ e.id }}">
+            <input type="text" name="note" placeholder="what was made, and why">
+            <button>Reconcile</button></form>
+        {% else %}<span class="small muted">{{ e.reconciled_by }}</span>{% endif %}</td>
+    </tr>
+    {% else %}<tr><td colspan="8" class="muted">No exceptions recorded.</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

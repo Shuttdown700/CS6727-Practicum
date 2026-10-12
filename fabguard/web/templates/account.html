@@ -1,0 +1,35 @@
+{% extends "base.html" %}{% block title %}Account — fabguard{% endblock %}
+{% block body %}
+<h1>Account</h1>
+<div class="grid g2">
+  <div class="panel">
+    <h2 style="margin-top:0">Change password</h2>
+    <form method="post">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <p><label class="small soft">Current</label>
+         <input type="password" name="current" autocomplete="current-password"></p>
+      <p><label class="small soft">New</label>
+         <input type="password" name="new" autocomplete="new-password"></p>
+      <p><label class="small soft">Confirm</label>
+         <input type="password" name="confirm" autocomplete="new-password"></p>
+      <p><button class="primary">Change password</button></p>
+    </form>
+    <p class="small muted">The change is logged; the password is not.</p>
+  </div>
+  <div class="panel">
+    <h2 style="margin-top:0">Operators</h2>
+    <table>
+      <tr><th>Account</th><th>Name</th><th>Created</th><th>Last sign-in</th></tr>
+      {% for u in users %}
+      <tr><td class="mono small">{{ u.username }}{% if u.disabled %}
+            <span class="pill INFO">disabled</span>{% endif %}</td>
+          <td class="small">{{ u.display_name }}</td>
+          <td class="small nowrap">{{ u.created_ts }}</td>
+          <td class="small nowrap">{{ u.last_login_ts or 'never' }}</td></tr>
+      {% endfor %}
+    </table>
+    <p class="small muted">Add accounts with
+      <code>python3 -m fabguard.tools.adduser</code>.</p>
+  </div>
+</div>
+{% endblock %}

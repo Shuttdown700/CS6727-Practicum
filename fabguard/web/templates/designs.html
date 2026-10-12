@@ -1,0 +1,55 @@
+{% extends "base.html" %}{% block title %}Designs — fabguard{% endblock %}
+{% block body %}
+<h1>Version Authority</h1>
+<p class="small soft">Immutable versions, explicit supersession, and a current
+version that can actually be queried. Reverting publishes a new version carrying
+the old content — nothing is ever deleted, so a revert is itself visible.</p>
+
+{% if share %}
+<div class="banner {{ 'ok' if share.writable else 'warn' }}">
+  Share <code>{{ share.root }}</code> —
+  {% if share.writable %}available and writable.
+  {% else %}<strong>not writable:</strong> {{ share.detail }}
+    Versions will still be recorded and retrievable through the service; only the
+    mirror copy on the share will be missing.{% endif %}
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2 style="margin-top:0">Publish a new version</h2>
+  <form method="post" action="{{ url_for('publish_design') }}" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="grid g2">
+      <p><label class="small soft">File</label><br><input type="file" name="artifact"></p>
+      <p><label class="small soft">Repository path</label>
+         <input type="text" name="repo_path" placeholder="projects/bracket.3mf — defaults to the filename"></p>
+    </div>
+    <p><label class="small soft">What changed?</label>
+       <input type="text" name="note" placeholder="wider flange, re-sliced for 0.6 nozzle…"></p>
+    <p><button class="primary">Publish</button></p>
+  </form>
+  <p class="small muted">Publishing goes through the sanctioned write path and
+    records a custody event. Republishing byte-identical content is refused.</p>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Designs</h2>
+  <table>
+    <tr><th>Design</th><th>Path</th><th>Current</th><th>SHA-256</th><th>Size</th>
+        <th>Published by</th><th>Versions</th><th></th></tr>
+    {% for d in designs %}
+    <tr>
+      <td><strong>{{ d.name }}</strong></td>
+      <td class="small mono">{{ d.repo_path }}</td>
+      <td class="nowrap"><span class="pill AUTHORIZED">v{{ d.current_version_no }}</span></td>
+      <td class="mono small">{{ d.current_sha256 | shorthash }}</td>
+      <td class="small nowrap">{{ '{:,}'.format(d.current_size) if d.current_size else '' }}</td>
+      <td class="small">{{ d.current_published_by }}<br>
+          <span class="muted">{{ d.current_published_ts }}</span></td>
+      <td class="small">{{ d.version_count }}</td>
+      <td><a class="btn" href="{{ url_for('design_detail', did=d.id) }}">History</a></td>
+    </tr>
+    {% else %}<tr><td colspan="8" class="muted">Nothing published yet.</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}fabguard{% endblock %}</title>
+<style>
+  :root{
+    --bg:#f4f4f1; --panel:#fff; --ink:#15150f; --soft:#52514e; --muted:#7d7c76;
+    --line:#dcdbd4; --blue:#2a78d6; --crit:#c7342f; --warn:#c77a00;
+    --notice:#2a78d6; --info:#6e6d68; --ok:#0a7d44;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  code,pre,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  header{background:#1c1c18;color:#f4f4f1;padding:.55rem 1rem;
+         display:flex;gap:1rem;align-items:center;flex-wrap:wrap}
+  header .brand{font-weight:700;letter-spacing:.02em}
+  header .brand small{font-weight:400;opacity:.6;margin-left:.4rem}
+  header nav{display:flex;gap:.15rem;flex-wrap:wrap;flex:1}
+  header nav a{color:#d8d7cf;text-decoration:none;padding:.3rem .6rem;border-radius:4px}
+  header nav a:hover{background:#32322c;color:#fff}
+  header nav a.on{background:var(--blue);color:#fff}
+  header .me{color:#b9b8b0;font-size:13px;display:flex;gap:.6rem;align-items:center}
+  header .me a{color:#d8d7cf}
+  main{padding:1rem;max-width:1500px;margin:0 auto}
+  h1{font-size:1.25rem;margin:.2rem 0 .9rem}
+  h2{font-size:1rem;margin:1.4rem 0 .5rem}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:7px;
+         padding:.85rem 1rem;margin-bottom:1rem}
+  .grid{display:grid;gap:.75rem}
+  .g4{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(390px,1fr))}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:.7rem .85rem}
+  .tile .n{font-size:1.8rem;font-weight:700;line-height:1.1}
+  .tile .k{color:var(--soft);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  .tile.bad .n{color:var(--crit)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:.4rem .5rem;border-bottom:1px solid var(--line);
+        vertical-align:top}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--soft);
+     font-weight:600;white-space:nowrap}
+  tbody tr:hover{background:#fafaf7}
+  .pill{display:inline-block;padding:.08rem .45rem;border-radius:10px;font-size:11px;
+        font-weight:700;letter-spacing:.03em;color:#fff;white-space:nowrap}
+  .CRITICAL,.ALTERED{background:var(--crit)}
+  .WARNING,.UNRECOGNIZED{background:var(--warn)}
+  .NOTICE,.UNVERIFIED{background:var(--notice)}
+  .INFO,.REMOVED{background:var(--info)}
+  .AUTHORIZED,.ok{background:var(--ok)}
+  .ADDED{background:var(--ok)} .MODIFIED{background:var(--warn)} .DELETED{background:var(--crit)}
+  .banner{padding:.6rem .85rem;border-radius:6px;margin-bottom:.8rem;border:1px solid}
+  .banner.ok{background:#e8f6ee;border-color:#a8d9bf;color:#0a5c34}
+  .banner.error{background:#fdeceb;border-color:#f0b4b1;color:#8f201c}
+  .banner.warn{background:#fdf4e3;border-color:#efd49a;color:#7a4e00}
+  button,.btn{font:inherit;padding:.28rem .7rem;border:1px solid var(--line);
+    background:#fff;border-radius:5px;cursor:pointer;color:var(--ink);text-decoration:none;
+    display:inline-block}
+  button:hover,.btn:hover{background:#f0efea}
+  button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  button.primary:hover{filter:brightness(1.08)}
+  button.danger{border-color:#e0b3b1;color:var(--crit)}
+  input[type=text],input[type=password],textarea{font:inherit;padding:.35rem .5rem;
+    border:1px solid var(--line);border-radius:5px;background:#fff;width:100%}
+  form.inline{display:inline-flex;gap:.3rem;align-items:center}
+  form.inline input[type=text]{width:auto;min-width:9rem}
+  .muted{color:var(--muted)} .soft{color:var(--soft)}
+  .small{font-size:12px}
+  .right{text-align:right} .nowrap{white-space:nowrap}
+  pre{background:#faf9f5;border:1px solid var(--line);border-radius:5px;
+      padding:.5rem;overflow:auto;font-size:11.5px;margin:.25rem 0;max-height:22rem}
+  details summary{cursor:pointer;color:var(--blue);font-size:12px}
+  .chain-ok{color:var(--ok);font-weight:700}
+  .chain-bad{color:var(--crit);font-weight:700}
+  .bar{height:5px;background:var(--line);border-radius:3px;overflow:hidden;min-width:60px}
+  .bar>i{display:block;height:100%;background:var(--blue)}
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">fabguard<small>{{ variant }}</small></span>
+  {% if user %}
+  <nav>
+    {% for ep,label in nav %}
+      <a href="{{ url_for(ep) }}" class="{{ 'on' if request.endpoint==ep }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <span class="me">
+    <a href="{{ url_for('account') }}" title="attributed as {{ user }} from {{ device_label }}">{{ display_name }}</a>
+    <form method="post" action="{{ url_for('logout') }}" class="inline">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button>Sign out</button>
+    </form>
+  </span>
+  {% endif %}
+</header>
+<main>
+  {% if user and active_exception %}
+    <div class="banner warn"><strong>Break-glass exception #{{ active_exception.id }} is open</strong>
+      until {{ active_exception.expires_ts }} — opened by {{ active_exception.opened_by }}:
+      {{ active_exception.reason }}. Fabrication during this window is unmediated.
+      <a href="{{ url_for('degraded') }}">Manage</a></div>
+  {% endif %}
+  {% if user and default_pw_warning %}
+    <div class="banner warn"><strong>Default credentials in use.</strong>
+      The seeded account still has the password from <code>config.py</code>.
+      <a href="{{ url_for('account') }}">Change it</a> before this leaves the bench.</div>
+  {% endif %}
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat,msg in msgs %}<div class="banner {{ cat }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  {% block body %}{% endblock %}
+</main>
+</body>
+</html>

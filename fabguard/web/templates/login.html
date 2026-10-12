@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% block title %}Sign in — fabguard{% endblock %}
+{% block body %}
+<div style="max-width:380px;margin:4rem auto">
+  <div class="panel">
+    <h1>Sign in</h1>
+    <p class="small soft">Actions taken in this portal are recorded against your
+      account in the append-only event log.</p>
+    <form method="post">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <p><label class="small soft">Operator</label>
+         <input type="text" name="username" autofocus autocomplete="username"></p>
+      <p><label class="small soft">Password</label>
+         <input type="password" name="password" autocomplete="current-password"></p>
+      <p><button class="primary" style="width:100%">Sign in</button></p>
+    </form>
+  </div>
+</div>
+{% endblock %}
