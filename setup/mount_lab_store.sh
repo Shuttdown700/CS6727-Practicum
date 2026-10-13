@@ -19,8 +19,8 @@ set -euo pipefail
 SERVER="${SERVER:-172.16.0.2}"
 SHARE="${SHARE:-labnas}"
 MOUNTPOINT="${MOUNTPOINT:-/mnt/labnas}"
-SMB_USER="${SMB_USER_LAB:-${SUDO_USER_LAB:-}}"
-SMB_PASS="${SMB_PASS_LAB:-}"
+SMB_USER_LAB="${SMB_USER_LAB:-${SUDO_USER_LAB:-}}"
+SMB_PASS_LAB="${SMB_PASS_LAB:-}"
 LOCAL_USER="${LOCAL_USER:-${SUDO_USER_LAB:-}}"
 CRED_FILE="${CRED_FILE:-/etc/samba/creds/${SHARE}}"
 
@@ -43,12 +43,12 @@ if [[ ${1:-} == --remove ]]; then
   exit 0
 fi
 
-[[ -n $SMB_USER   ]] || die "Set SMB_USER=<samba login>."
+[[ -n $SMB_USER_LAB   ]] || die "Set SMB_USER_LAB=<samba login>."
 [[ -n $LOCAL_USER ]] || die "Set LOCAL_USER=<local login that owns the files>."
 id "$LOCAL_USER" &>/dev/null || die "Local user '${LOCAL_USER}' does not exist."
 
-if [[ -z $SMB_PASS ]]; then
-  read -rsp "Samba password for ${SMB_USER}@${SERVER}: " SMB_PASS; echo
+if [[ -z $SMB_PASS_LAB ]]; then
+  read -rsp "Samba password for ${SMB_USER_LAB}@${SERVER}: " SMB_PASS_LAB; echo
 fi
 
 export DEBIAN_FRONTEND=noninteractive
@@ -63,8 +63,8 @@ timeout 5 bash -c ">/dev/tcp/${SERVER}/445" 2>/dev/null \
 install -d -m 700 -o root -g root "$(dirname "$CRED_FILE")"
 umask 077
 cat > "$CRED_FILE" <<EOF
-username=${SMB_USER}
-password=${SMB_PASS}
+username=${SMB_USER_LAB}
+password=${SMB_PASS_LAB}
 EOF
 chown root:root "$CRED_FILE"
 chmod 600 "$CRED_FILE"
