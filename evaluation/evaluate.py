@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-evaluate.py -- ingest the Control Traceability Matrix workbook, score it, and
+Description: Ingest the Control Traceability Matrix workbook, score it, and
 write infographics (.png) plus raw score dumps (.txt) to ../output.
 
     python3 evaluate.py

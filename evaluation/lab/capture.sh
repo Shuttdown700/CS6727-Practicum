@@ -1,75 +1,70 @@
 #!/usr/bin/env bash
-# lab_capture.sh — capture controller for lab_segment.sh evaluation runs
 #
-# Captures every lab segment simultaneously, tags the run with the active
-# control variant, samples host resource pressure throughout, and records the
-# evidence needed to compare runs: nftables counters before and after,
-# associated stations, DHCP leases, a resource time series, and a checksummed
-# manifest of every pcap.
+# Description: 
+#  Captures every lab segment simultaneously
+#   Tags the run with the active control variant
+#   Samples host resource pressure throughout
+#   Records the evidence needed to compare runs:
+#     nftables counters before and after
+#     associated stations
+#     DHCP leases
+#     resource time series
+#     checksummed manifest of every pcap.
 #
-#   start      begin a run on all lab interfaces
-#   stop       end the run, ship the tail, write closing metadata
-#   status     show the active run and its current resource reading
-#   list       list runs on the capture store
-#   resources  post-hoc resource analysis for a run
+# CLI Arguements:
+#   start: begin a run on all lab interfaces
+#   stop: end the run, ship the tail, write closing metadata
+#   status: show the active run and its current resource reading
+#   list: list runs on the capture store
+#   resources: post-hoc resource analysis for a run
 #
-# Usage:
+# Usage Examples:
 #   sudo ./lab_capture.sh start
 #   sudo ./lab_capture.sh start --label print-submission --duration 900
 #   sudo ./lab_capture.sh start --filter 'not port 22' --sample-interval 2
 #   sudo ./lab_capture.sh stop
 #   sudo ./lab_capture.sh resources 20260930-1102-full-print-submission
-#
-# Design
-#   * tcpdump writes to LOCAL staging, not straight to the NAS. A Wi-Fi hiccup
-#     mid-write would corrupt an in-flight capture on a CIFS mount; locally it
-#     cannot. Each file is shipped to the NAS by tcpdump's -z hook as soon as
-#     rotation closes it, so staging holds only the active file plus any backlog.
-#   * The uplink is refused as a capture source. Capturing it would record the
-#     CIFS writes of the capture itself — an unbounded feedback loop.
-#   * Counters are snapshotted at start and stop. The delta is the measurement:
-#     which control rules actually fired during the run.
-#   * Resource sampling exists to answer one question: when a run looks slow or
-#     lossy, was the Pi the cause? The discriminator is the staging backlog read
-#     against CPU. Backlog growing with CPU pinned means compute-bound; backlog
-#     growing with CPU idle means the store or its link is the constraint.
-#     Neither is visible from the pcaps alone, so both are recorded here.
+
 
 set -euo pipefail
 
-STORE="${STORE:-/mnt/appo/labcaptures}"
-STAGING="${STAGING:-/var/lib/labcap/staging}"
-RUNTIME_DIR="/run/labcap"
-ROTATE_SECS="${ROTATE_SECS:-300}"          # new file every 5 minutes
-SNAPLEN="${SNAPLEN:-0}"                    # 0 = whole packet
-COMPRESS="${COMPRESS:-1}"                  # gzip each closed file before shipping
-MIN_FREE_MB="${MIN_FREE_MB:-2048}"         # refuse to start below this on staging
-SAMPLE_SECS="${SAMPLE_SECS:-5}"            # resource poll interval
-RESOURCE_SAMPLE="${RESOURCE_SAMPLE:-1}"    # 0 = disable the sampler entirely
-VARIANT_FILE="/etc/lab-segment/variant"
-SHIPPER="/usr/local/sbin/labcap-ship"
+STORE="${STORE:-/mnt/appo/labcaptures}" # permanent storage for completed runs
+STAGING="${STAGING:-/var/lib/labcap/staging}" # temporary space for files before shipping
+RUNTIME_DIR="/run/labcap" # runtime state, not preserved across reboots
+ROTATE_SECS="${ROTATE_SECS:-300}" # new file every 5 minutes
+SNAPLEN="${SNAPLEN:-0}" # 0 = whole packet
+COMPRESS="${COMPRESS:-1}" # gzip each closed file before shipping
+MIN_FREE_MB="${MIN_FREE_MB:-2048}" # refuse to start below this on staging
+SAMPLE_SECS="${SAMPLE_SECS:-5}" # resource poll interval
+RESOURCE_SAMPLE="${RESOURCE_SAMPLE:-1}" # 0 = disable the sampler entirely
+VARIANT_FILE="/etc/lab-segment/variant" # active control variant, if any
+SHIPPER="/usr/local/sbin/labcap-ship" # tcpdump -z hook to ship each closed file to the store
 
-# Thresholds used only to colour the verdict in `resources` / `status`.
-T_CPU="${T_CPU:-85}"          # % busy, all cores
-T_SOFTIRQ="${T_SOFTIRQ:-25}"  # % softirq — packet processing specifically
-T_IO="${T_IO:-90}"            # % disk utilisation on the staging device
-T_TEMP="${T_TEMP:-80}"        # degrees C
-T_MEM_MB="${T_MEM_MB:-200}"   # MB available
+# Resource thresholds for warnings in `status` output. These are not hard limits; they are just printed to the user if exceeded.
+T_CPU="${T_CPU:-85}" # % cpu busy
+T_SOFTIRQ="${T_SOFTIRQ:-25}" # % softirq
+T_IO="${T_IO:-90}" # % iowait
+T_TEMP="${T_TEMP:-80}" # C
+T_MEM_MB="${T_MEM_MB:-200}" # MB available
 
-# Segments to capture: label:connection-name
+# The lab segments to capture. Each is a name:NetworkManager connection pair. The name is used in filenames and logs, the connection is resolved to an interface. The uplink interface is automatically excluded.
 SEGMENTS="${SEGMENTS:-operator:lab-ap fabrication:lab-ap2 storage:lab-wired}"
 
+# Logging helpers: log = green, warn = yellow, die = red + exit 1
 log()  { printf '\e[1;32m[+]\e[0m %s\n' "$*"; }
 warn() { printf '\e[1;33m[!]\e[0m %s\n' "$*" >&2; }
 die()  { printf '\e[1;31m[x]\e[0m %s\n' "$*" >&2; exit 1; }
 
+# Check for root and tcpdump
 [[ $EUID -eq 0 ]] || die "Run as root (sudo)."
 command -v tcpdump >/dev/null || die "tcpdump not installed."
 
+# Resolve the default route's interface, which is assumed to be the uplink and is excluded from capture.
 uplink_iface() {
   ip -4 route show default 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}'
 }
 
+# Resolve a NetworkManager connection name to its interface. Returns empty if the connection is not found or has no interface.
 con_iface() {
   local d
   d="$(nmcli -t -f GENERAL.DEVICES con show id "$1" 2>/dev/null | cut -d: -f2)"
@@ -77,8 +72,7 @@ con_iface() {
   nmcli -g connection.interface-name con show id "$1" 2>/dev/null || echo ""
 }
 
-# Backing block device for a path, reduced to the parent (mmcblk0p2 -> mmcblk0,
-# sda1 -> sda, nvme0n1p1 -> nvme0n1) so it matches a /proc/diskstats row.
+# Resolve a path to its backing device name, stripping partition suffixes. Returns empty if the path is not mounted or the device cannot be determined.
 backing_dev() {
   local src base
   src="$(df -P "$1" 2>/dev/null | awk 'NR==2{print $1}')"
@@ -91,7 +85,7 @@ backing_dev() {
   esac
 }
 
-# ---- shipper: invoked by tcpdump -z on each closed savefile -------------------
+# Install the labcap-ship helper script, which is called by tcpdump -z on each closed file. It checks the destination, optionally compresses, and moves the file to the store with a checksum manifest and timestamped log.
 install_shipper() {
   cat > "$SHIPPER" <<'SH'
 #!/bin/sh
@@ -119,12 +113,7 @@ SH
   chown root:root "$SHIPPER"; chmod 0755 "$SHIPPER"
 }
 
-# ---- resource sampler ---------------------------------------------------------
-# Runs in the background for the life of the run, appending one CSV row per
-# interval. Everything comes from /proc and /sys except the Pi-specific throttle
-# word, so a sample costs a handful of small reads and is negligible next to
-# three tcpdumps. Rates and deltas are computed against the previous sample, so
-# the first row after the header is the baseline and carries zeros.
+# Sample host resources and interface counters every $2 seconds, writing to $1. The first row is a header, subsequent rows are CSV data. The stagedir is used to determine the backing device for I/O stats. The interfaces are used to collect rx packet/dropped/missed/fifo counts.
 sampler() {  # $1 = csv path, $2 = interval secs, $3 = stagedir, $4.. = interfaces
   set +e
   local csv="$1" iv="$2" stagedir="$3"; shift 3
@@ -154,7 +143,7 @@ sampler() {  # $1 = csv path, $2 = interval secs, $3 = stagedir, $4.. = interfac
     local now ts elapsed
     now="$(date +%s)"; ts="$(date -Is)"; elapsed=$((now - t0))
 
-    # --- cpu ------------------------------------------------------------------
+    # CPU counters
     local cu cn cs ci cw cq cx cst total idle_all
     read -r _ cu cn cs ci cw cq cx cst _ < /proc/stat
     total=$((cu+cn+cs+ci+cw+cq+cx+cst)); idle_all=$((ci+cw))
@@ -168,7 +157,7 @@ sampler() {  # $1 = csv path, $2 = interval secs, $3 = stagedir, $4.. = interfac
     fi
     p_total=$total; p_idle=$idle_all; p_iowait=$cw; p_softirq=$cx
 
-    # --- load, memory ---------------------------------------------------------
+    # Memory and swap counters
     local l1 l5; read -r l1 l5 _ < /proc/loadavg
     local memav swtot swfree
     memav="$(awk '/^MemAvailable:/{print int($2/1024)}' /proc/meminfo 2>/dev/null)"
@@ -176,19 +165,19 @@ sampler() {  # $1 = csv path, $2 = interval secs, $3 = stagedir, $4.. = interfac
     swfree="$(awk '/^SwapFree:/{print $2}' /proc/meminfo 2>/dev/null)"
     local swused=$(( ( ${swtot:-0} - ${swfree:-0} ) / 1024 ))
 
-    # --- thermal / clock / throttle (Pi-specific; blank where unavailable) ----
+    # Thermal and throttling counters
     local temp mhz thr
     temp="$(awk '{printf "%.1f", $1/1000}' /sys/class/thermal/thermal_zone0/temp 2>/dev/null)"
     mhz="$(awk '{print int($1/1000)}' /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null)"
     thr="$(vcgencmd get_throttled 2>/dev/null | cut -d= -f2)"
 
-    # --- pressure stall (absent unless CONFIG_PSI is enabled) -----------------
+    # Pressure Stall Information (PSI) counters
     local pc pi pm
     pc="$(awk '/^some/{print $2}' /proc/pressure/cpu    2>/dev/null | cut -d= -f2)"
     pi="$(awk '/^some/{print $2}' /proc/pressure/io     2>/dev/null | cut -d= -f2)"
     pm="$(awk '/^some/{print $2}' /proc/pressure/memory 2>/dev/null | cut -d= -f2)"
 
-    # --- staging device I/O ---------------------------------------------------
+    # Disk I/O counters
     local ioticks=0 wsect=0 dutil=0 dwmbs=0
     if [[ -n $ddev ]]; then
       read -r ioticks wsect < <(awk -v d="$ddev" '$3==d{print $13, $10; exit}' /proc/diskstats 2>/dev/null)
@@ -201,13 +190,13 @@ sampler() {  # $1 = csv path, $2 = interval secs, $3 = stagedir, $4.. = interfac
       p_ioticks=$ioticks; p_wsect=$wsect
     fi
 
-    # --- backlog and shipping -------------------------------------------------
+    # backlog counters
     local sfiles smb shipped
     sfiles="$(find "$stagedir" -maxdepth 1 -name '*.pcap*' 2>/dev/null | wc -l)"
     smb="$(du -sm "$stagedir" 2>/dev/null | cut -f1)"
     shipped="$(wc -l < "${RUNTIME_DIR}/manifest" 2>/dev/null || echo 0)"
 
-    # --- capture process cost -------------------------------------------------
+    # capture process counters
     local capticks=0 caprss=0 capcpu=0 pid
     if [[ -f "${RUNTIME_DIR}/pids" ]]; then
       while read -r pid; do
@@ -223,12 +212,10 @@ sampler() {  # $1 = csv path, $2 = interval secs, $3 = stagedir, $4.. = interfac
       capcpu=$(( (capticks - p_capticks) * 100 / (iv * tick) ))
     fi
     p_capticks=$capticks
-    # pgrep -c prints 0 AND exits non-zero when nothing matches, so a
-    # `|| echo 0` fallback would emit two lines and corrupt the row.
     local gzipn; gzipn="$(pgrep -c gzip 2>/dev/null)" || gzipn=0
     [[ $gzipn =~ ^[0-9]+$ ]] || gzipn=0
 
-    # --- per-interface counters ----------------------------------------------
+    # per-interface counters
     local ifcols=""
     for i in "${ifl[@]}"; do
       local sd="/sys/class/net/${i}/statistics"
@@ -260,6 +247,7 @@ sampler() {  # $1 = csv path, $2 = interval secs, $3 = stagedir, $4.. = interfac
   done
 }
 
+# Take a snapshot of the current system state
 snapshot() {  # $1 = destination directory, $2 = phase label
   local d="$1" p="$2"
   { date -Is; echo "phase=${p}"; } > "${d}/${p}.txt"
@@ -289,7 +277,7 @@ snapshot() {  # $1 = destination directory, $2 = phase label
   } > "${d}/${p}-host.txt" 2>&1 || true
 }
 
-# ---- start --------------------------------------------------------------------
+# Start a new capture run. This is the main entry point for `start`.
 do_start() {
   local label="" duration="" filter="" sample="$SAMPLE_SECS"
   while [[ $# -gt 0 ]]; do
@@ -385,8 +373,6 @@ do_start() {
     log "  ${nm} on ${ifn} (pid $!)"
   done
 
-  # Sampler starts after the tcpdumps so its first delta covers a loaded system,
-  # and its PID is tracked separately so `stop` can kill it last.
   if (( RESOURCE_SAMPLE )); then
     sampler "${stagedir}/resources.csv" "$sample" "$stagedir" "${ifaces[@]}" &
     echo "$!" > "${RUNTIME_DIR}/sampler_pid"
@@ -418,7 +404,7 @@ ${duration:+    Duration: ${duration}s (auto-stops capture; still run 'stop' to 
 EOF
 }
 
-# ---- stop ---------------------------------------------------------------------
+# Stop the active capture run, shipping any remaining files and writing final metadata.
 do_stop() {
   [[ -f "${RUNTIME_DIR}/runid" ]] || die "No active run."
   local runid rundir stagedir
@@ -433,23 +419,17 @@ do_stop() {
     while read -r p; do kill -KILL "$p" 2>/dev/null || true; done < "${RUNTIME_DIR}/pids"
   fi
 
-  # Sampler dies last so the tail of the series covers shutdown and the final
-  # shipping burst — often where the backlog actually shows up.
   if [[ -f "${RUNTIME_DIR}/sampler_pid" ]]; then
     local sp; sp="$(cat "${RUNTIME_DIR}/sampler_pid")"
     kill -TERM "$sp" 2>/dev/null || true
     pkill -TERM -P "$sp" 2>/dev/null || true
   fi
 
-  # tcpdump's -z hook never fires for the final, unrotated file — ship by hand.
   log "Shipping remaining files"
   shopt -s nullglob
   for f in "${stagedir}"/*.pcap; do "$SHIPPER" "$f"; done
   shopt -u nullglob
 
-  # tcpdump prints its kernel-drop count only on exit. That number is the
-  # authoritative answer to "did the host lose packets", so lift it into run.meta
-  # rather than leaving it buried in a per-segment log.
   local dropped_total=0
   {
     shopt -s nullglob
@@ -474,7 +454,6 @@ do_stop() {
   cp -f "${RUNTIME_DIR}/shiplog"  "${rundir}/ship.log"        2>/dev/null || true
   cp -f "${stagedir}/resources.csv" "${rundir}/resources.csv" 2>/dev/null || true
 
-  # leftovers mean the store went away mid-run; keep them rather than lose data
   shopt -s nullglob
   local left=("${stagedir}"/*.pcap "${stagedir}"/*.pcap.gz)
   shopt -u nullglob
@@ -500,7 +479,7 @@ do_stop() {
   echo "    Verify:   cd ${rundir} && sha256sum -c manifest.sha256"
 }
 
-# ---- resource analysis --------------------------------------------------------
+# Analyze the resource series for a run, printing a summary and any warnings. The series is in $1/resources.csv, and the run metadata is in $1/run.meta.
 analyse_resources() {  # $1 = run directory
   local rundir="$1" csv="${1}/resources.csv"
   [[ -f $csv ]] || { echo "    (no resource series for this run)"; echo; return; }
@@ -567,6 +546,7 @@ analyse_resources() {  # $1 = run directory
   }' "$csv"
 }
 
+# Resolve a run id to its store directory and analyze the resource series for that run. If no run id is given, analyze the current active run (if any).
 do_resources() {
   local target="${1:-}" rundir
   if [[ -z $target ]]; then
@@ -586,7 +566,7 @@ do_resources() {
   analyse_resources "$rundir"
 }
 
-# ---- status -------------------------------------------------------------------
+# Status of the active capture run, if any. This prints the run id, variant, number of captures running, and a summary of the latest resource sample.
 do_status() {
   if [[ ! -f "${RUNTIME_DIR}/runid" ]]; then
     echo "  No active run."
@@ -638,7 +618,7 @@ EOF
   echo
 }
 
-# ---- list ---------------------------------------------------------------------
+# List the runs in the capture store, with their variant, size, number of files, and kernel drops.
 do_list() {
   [[ -d $STORE ]] || die "${STORE} not available. Is the capture store mounted?"
   printf '  %-42s %-10s %-8s %-6s %s\n' RUN VARIANT SIZE FILES DROPS
@@ -655,7 +635,7 @@ do_list() {
   done
 }
 
-# ---- dispatch -----------------------------------------------------------------
+# dispatch the command line to the appropriate function. The first argument is the command, and the rest are passed to that function.
 cmd="${1:-}"; shift || true
 case "$cmd" in
   start)     do_start "$@" ;;

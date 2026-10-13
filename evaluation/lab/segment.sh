@@ -1,72 +1,55 @@
 #!/usr/bin/env bash
-# lab_segment.sh — segment the lab into operator / fabrication / storage networks
-#                  and switch control variants for evaluation runs.
 #
-# Companion to lab-ap-setup.sh (two APs) and setup_wired_lab.sh (wired link).
-# Those scripts build the segments; this one imposes the forwarding policy and
-# swaps it between the three control variants under test.
+# Description: Segment the lab into operator / fabrication / storage networks and switch control variants for evaluation runs.
 #
-#   setup      verify segment addressing + enable AP isolation (run once)
-#   baseline   permissive policy — current improvised practice
-#   minimal    ingress/egress controls only
-#   full       complete mediation — operator reaches nothing directly
-#   status     show current state
-#   teardown   remove segmentation, restore the per-segment firewalls
+# Arguments:
+#   setup: verify segment addressing + enable AP isolation (run once)
+#   baseline: permissive policy — current improvised practice
+#   minimal: ingress/egress controls only
+#   full: complete mediation — operator reaches nothing directly
+#   status: show current state
+#   teardown: remove segmentation, restore the per-segment firewalls
 #
-# Usage:
+# Usage Examples:
 #   sudo ./lab_segment.sh setup
 #   sudo ./lab_segment.sh full
 #   sudo ./lab_segment.sh status
 #
-# Network model (post-second-dongle):
+# Network model (cao 2026-10-13):
 #   Operator     192.168.67.0/24   LAB-NET   wlan1   lab-ap      DHCP via NM shared
 #   Fabrication  192.168.68.0/24   LAB-NET2  wlan2   lab-ap2     DHCP via NM shared
 #   Storage      172.16.0.0/16     wired     eth0    lab-wired   static, Pi 2 NAS
 #   Uplink       10.0.0.0/24       home      wlan0   (client)
-#
-# Design notes
-#   * Each segment is now its own L2 domain on its own radio or wire. There is
-#     no L2 shortcut between operator and fabrication to defend against, so AP
-#     isolation is defence-in-depth (station-to-station within one SSID), not
-#     the segment boundary itself.
-#   * Addressing is applied by the build scripts and left alone across all
-#     variants, so devices never need reconfiguring between runs and captures
-#     stay comparable. Only forwarding policy changes per variant.
-#   * While segmentation is active, `inet labseg` subsumes the per-segment
-#     tables from the build scripts (labfw_lab_ap, labfw_lab_ap2, labwired),
-#     including their home-LAN protection and the wired masquerade. Those
-#     tables are deleted so they cannot re-reject traffic labseg accepted:
-#     an `accept` in one base chain does not stop traversal of the next.
-#     teardown restores them.
-#   * The mediating service runs on the Pi. Pi-originated traffic is OUTPUT,
-#     not FORWARD, so it is never matched by these rules — the mediator always
-#     reaches every segment. Set MEDIATOR_IP if it moves to its own host.
 
 set -euo pipefail
 
-# ---- config (override via env) ------------------------------------------------
-OPER_CON="${OPER_CON:-lab-ap}"              # LAB-NET     (wlan1)
-FAB_CON="${FAB_CON:-lab-ap2}"               # LAB-NET2    (wlan2)
-STOR_CON="${STOR_CON:-lab-wired}"           # wired link  (eth0)
+# Configurations (defaults can be overridden via environment variables)
 
-OPER_NET="${OPER_NET:-192.168.67.0/24}"     # operator segment
-FAB_NET="${FAB_NET:-192.168.68.0/24}"       # fabrication segment
-STOR_ADDR="${STOR_ADDR:-172.16.0.1/16}"     # Pi's address on the storage segment
+# Segment connections and their interfaces. The build scripts create these profiles and assign them to the correct radios.
+OPER_CON="${OPER_CON:-lab-ap}" # LAB-NET (wlan1)
+FAB_CON="${FAB_CON:-lab-ap2}" # LAB-NET2 (wlan2)
+STOR_CON="${STOR_CON:-lab-wired}" # wired link (eth0)
+
+# Segment networks. The build scripts assign these to the correct profiles; labseg does not modify them.
+OPER_NET="${OPER_NET:-192.168.67.0/24}" # operator segment
+FAB_NET="${FAB_NET:-192.168.68.0/24}" # fabrication segment
+STOR_ADDR="${STOR_ADDR:-172.16.0.1/16}" # Pi's address on the storage segment
 
 # Mediating service location. Empty = on the Pi itself (default).
 MEDIATOR_IP="${MEDIATOR_IP:-}"
 
-# Private space the lab must never reach (home LAN protection). Lab segments are
-# excepted by the inter-segment rules, which are evaluated first.
+# Networks that are blocked from the lab segments. The build scripts block these via their own tables, which labseg deletes and replaces with its own rules.
 BLOCK_NETS="${BLOCK_NETS:-10.0.0.0/8, 169.254.0.0/16, 100.64.0.0/10}"
 
-LOG_DROPS="${LOG_DROPS:-1}"                 # 1 = log blocked attempts (rate-limited)
+LOG_DROPS="${LOG_DROPS:-1}" # 1 = log blocked attempts (rate-limited)
+
+# State files and hook locations
 STATE_DIR="/etc/lab-segment"
 NFT_FILE="${STATE_DIR}/labseg.nft"
 VARIANT_FILE="${STATE_DIR}/variant"
 HOOK="/etc/NetworkManager/dispatcher.d/95-lab-segment"
 
-# Tables installed by the build scripts that labseg replaces while active.
+# The build scripts create their own tables to enforce per-segment firewalls. labseg deletes those tables and replaces them with its own rules, so it must know which tables to remove. 
 SUBSUMED_TABLES=("inet labfw_lab_ap" "inet labfw_lab_ap2" "inet labwired" "inet labfw")
 BUILD_HOOKS=(
   "/etc/NetworkManager/dispatcher.d/90-lab-ap-fw:${OPER_CON}"
@@ -74,14 +57,17 @@ BUILD_HOOKS=(
   "/etc/NetworkManager/dispatcher.d/91-lab-wired-fw:${STOR_CON}"
 )
 
+# Logging helpers
 log()  { printf '\e[1;32m[+]\e[0m %s\n' "$*"; }
 warn() { printf '\e[1;33m[!]\e[0m %s\n' "$*" >&2; }
 die()  { printf '\e[1;31m[x]\e[0m %s\n' "$*" >&2; exit 1; }
 
+# Check prerequisites
 [[ $EUID -eq 0 ]] || die "Run as root (sudo)."
 command -v nft   >/dev/null || die "nftables not installed."
 command -v nmcli >/dev/null || die "NetworkManager not installed."
 
+# Derive the storage network from the Pi's address. This is used in the ruleset to allow operator->storage and fabrication->storage traffic, and to masquerade storage->WAN traffic.
 STOR_NET="$(python3 - "$STOR_ADDR" <<'PY' 2>/dev/null || true
 import ipaddress,sys
 print(ipaddress.ip_interface(sys.argv[1]).network)
@@ -89,9 +75,7 @@ PY
 )"
 [[ -n ${STOR_NET:-} ]] || die "Could not derive the storage network from ${STOR_ADDR}."
 
-# ---- interface discovery ------------------------------------------------------
-# Resolve a connection to its device; fall back to the MAC it is pinned to when
-# the profile is down, so status/teardown work on a half-up system.
+# Resolve a connection name to its interface. This is needed because the build scripts create the connections, and labseg does not know which interface each connection is bound to. It first tries `nmcli con show id <name>` to get the device, and if that fails (e.g., for a disconnected Wi-Fi profile), it falls back to matching the MAC address of the connection to the MAC address of each wireless interface.
 con_iface() {
   local con="$1" d mac cand
   d="$(nmcli -t -f GENERAL.DEVICES con show id "$con" 2>/dev/null | cut -d: -f2)"
@@ -106,10 +90,12 @@ con_iface() {
   nmcli -g connection.interface-name con show id "$con" 2>/dev/null || echo ""
 }
 
+# Resolve the default route's interface. This is used to apply WAN egress rules only to the uplink interface, so inter-segment traffic keeps its real source address and captures stay readable.
 uplink_iface() {
   ip -4 route show default 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}'
 }
 
+# Verify that a connection exists. If not, exit with an error. This is used to ensure that the build scripts have been run and the expected connections are present before proceeding with segmentation.
 require_con() {
   nmcli con show id "$1" &>/dev/null || die "Connection '$1' not found. Run the build scripts first."
 }
@@ -117,6 +103,7 @@ require_con "$OPER_CON"
 require_con "$FAB_CON"
 require_con "$STOR_CON"
 
+# Resolve the connections to their interfaces. If any cannot be resolved, exit with an error. This is used to ensure that the build scripts have been run and the expected connections are present before proceeding with segmentation.
 OPER_IF="$(con_iface "$OPER_CON")"
 FAB_IF="$(con_iface "$FAB_CON")"
 STOR_IF="$(con_iface "$STOR_CON")"
@@ -126,7 +113,7 @@ STOR_IF="$(con_iface "$STOR_CON")"
 
 LAB_IFACES="\"${OPER_IF}\", \"${FAB_IF}\", \"${STOR_IF}\""
 
-# ---- setup: verify addressing, enable AP isolation ---------------------------
+# Set up the segmenting ruleset. This verifies that the connections are present and have the expected addressing, enables AP isolation on the Wi-Fi segments, and prints instructions for the next step (choosing a variant).
 do_setup() {
   local addr iso_ok=1
   mkdir -p "$STATE_DIR"
@@ -143,9 +130,7 @@ do_setup() {
   addr="$(nmcli -g ipv4.addresses con show id "$STOR_CON")"
   [[ $addr == *"${STOR_ADDR%/*}"* ]] || warn "${STOR_CON} address '${addr}' does not look like ${STOR_ADDR}."
 
-  # Station-to-station isolation within each SSID. No longer the segment
-  # boundary (separate radios do that) — this stops printer-to-printer and
-  # client-to-client traffic inside one segment.
+  # Enable AP isolation on the Wi-Fi segments. This prevents intra-segment L2 traffic, which is a prerequisite for measuring the effects of segmentation. If AP isolation cannot be set, warn that intra-segment traffic is possible and record it as a measurement limitation.
   for c in "$OPER_CON" "$FAB_CON"; do
     if nmcli con modify "$c" 802-11-wireless.ap-isolation 1 2>/dev/null; then
       log "AP isolation enabled on ${c}"
@@ -160,6 +145,7 @@ do_setup() {
     nmcli con up "$c" >/dev/null 2>&1 || warn "Could not bring '${c}' up; settings apply on next connect."
   done
 
+  # Print instructions for the next step (choosing a variant).
   cat <<EOF
 
 [+] Segment addressing verified.
@@ -181,11 +167,7 @@ do_setup() {
 EOF
 }
 
-# ---- ruleset generation -------------------------------------------------------
-# Emits a logging rule (rate-limited, no verdict) followed by a separate
-# enforcing rule. Never combine them: a `limit` statement that is over its rate
-# stops the rule, so `log ... limit ... reject` silently stops rejecting under
-# flood and the packet falls through to `policy accept`.
+# Emit a block rule. This prints a rule that drops traffic from $1 to $2, with the given verdict and comment. If LOG_DROPS is set, it also logs the blocked attempts at a rate of 10 per second.
 emit_block() {  # $1=saddr expr  $2=daddr expr  $3=verdict  $4=comment
   local match="$1 $2"
   if [[ $LOG_DROPS == 1 ]]; then
@@ -197,6 +179,7 @@ emit_accept() { # $1=saddr expr  $2=daddr expr  $3=comment
   echo "    $1 $2 counter accept comment \"$3\""
 }
 
+# Generate the nftables ruleset for the given variant. This creates a table inet labseg with a forward chain that implements the segmentation policy, and a table ip labseg_nat that implements NAT for the storage segment. The generated ruleset is written to $NFT_FILE.
 gen_ruleset() {
   local variant="$1" up_if
   local oper_fab oper_stor oper_wan fab_wan stor_wan reverse
@@ -337,7 +320,7 @@ NFT
   chmod 0644 "$NFT_FILE"
 }
 
-# ---- dispatcher hook: reapply after any segment reconnects -------------------
+# Hook to reapply segmentation after a segment reconnects. This is needed because the build scripts' hooks (90-/91-) run after labseg's hook, so they would overwrite labseg's rules on reconnect. This hook runs after 90-/91- and reapplies the labseg ruleset.
 install_hook() {
   cat > "$HOOK" <<EOF
 #!/bin/sh
@@ -357,7 +340,7 @@ EOF
   ln -sf "$HOOK" /etc/NetworkManager/dispatcher.d/pre-up.d/95-lab-segment
 }
 
-# ---- variant application ------------------------------------------------------
+# Variant selection. This generates the ruleset for the given variant, validates it, applies it, records the active variant, and installs the hook to reapply segmentation after a segment reconnects.
 do_variant() {
   local variant="$1"
   mkdir -p "$STATE_DIR"
@@ -385,7 +368,7 @@ do_variant() {
 EOF
 }
 
-# ---- status -------------------------------------------------------------------
+# Status of the active variant. This prints the active variant, the uplink interface, the connections and their interfaces and networks, the AP isolation status of each Wi-Fi segment, the addresses of each segment, and the current ruleset and counters.
 do_status() {
   local variant
   variant="$(cat "$VARIANT_FILE" 2>/dev/null || echo '<none>')"
@@ -428,7 +411,7 @@ EOF
   echo
 }
 
-# ---- teardown -----------------------------------------------------------------
+# Teardown segmentation. This removes the labseg tables, restores the build scripts' tables, and disables AP isolation on the Wi-Fi segments. It does not modify the segment addressing, so all three segments remain up and separate.
 do_teardown() {
   log "Removing segmentation"
 
@@ -457,7 +440,7 @@ do_teardown() {
   warn "Addressing is untouched; all three segments remain up and separate."
 }
 
-# ---- dispatch -----------------------------------------------------------------
+# Dispatch the command line to the appropriate function. The first argument is the command, and the rest are passed to that function.
 case "${1:-}" in
   setup)                 do_setup ;;
   baseline|minimal|full) do_variant "$1" ;;

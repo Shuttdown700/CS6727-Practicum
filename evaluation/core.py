@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from __future__ import annotations
 
 import re
@@ -7,10 +9,11 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
 import openpyxl
 from openpyxl.utils.cell import range_boundaries
 
-# PATHS
+### PATHS
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 WORKBOOK = SCRIPT_DIR / "input" / "Control Traceability Matrix.xlsx"
@@ -21,11 +24,11 @@ SHEET_TREE = "Attack Tree Structure"
 SHEET_LEAF = "Attack Leaf Risk Matrix"
 SHEET_EDGES = "Attack Tree Edges"
 
-# INFOGRAPHIC SETTINGS
+# GLOBAL INFOGRAPHIC SETTINGS
 DPI = 200
 PLOT_STYLE = "ggplot"
 
-# SOLUTION VARIANTS
+# SOLUTION VARIANTS & ASSOCIATED COLUMN NAMES
 VARIANTS = [
     ("Baseline",      "Baseline Status",      "Baseline Likelihood",      "Baseline Residual Risk Score"),
     ("Observational", "Observational Status",  "Observational Likelihood", "Observational Residual Risk Score"),
@@ -101,24 +104,6 @@ TABLE_I2_LEVEL_OF_RISK = {
     0:  {0: 0, 2: 0, 5: 0, 8: 2, 10: 2},
 }
 
-
-def normalize_canonical(header) -> str:
-    return re.sub(r"[^a-z0-9]", "", str(header or "").lower())
-
-
-def assess_overall_likelihood(freq: int, loai: int) -> int:
-    return TABLE_G5_OVERALL_LIKELIHOOD[freq][loai]
-
-
-def assess_risk(likelihood: int, impact: int) -> int:
-    return TABLE_I2_LEVEL_OF_RISK[likelihood][impact]
-
-
-def shift_band(value: int, steps: int) -> int:
-    i = BAND_LADDER.index(value)
-    return BAND_LADDER[max(0, min(len(BAND_LADDER) - 1, i + steps))]
-
-
 # COLORS
 SERIES = {
     "Baseline": "#2a78d6",
@@ -146,8 +131,31 @@ MEDIATION_STATUS_FILL = {
     "Fully Addressed":     "#cde2fb",
 }
 
+# UTILITY FUNCTIONS
+def normalize_canonical(header) -> str:
+    """Normalize a header for canonical comparison."""
+    return re.sub(r"[^a-z0-9]", "", str(header or "").lower())
+
+
+def assess_overall_likelihood(freq: int, loai: int) -> int:
+    """Return the overall likelihood of adverse impact given frequency and likelihood of adverse impact."""
+    return TABLE_G5_OVERALL_LIKELIHOOD[freq][loai]
+
+
+def assess_risk(likelihood: int, impact: int) -> int:
+    """Return the level of risk given likelihood and impact."""
+    return TABLE_I2_LEVEL_OF_RISK[likelihood][impact]
+
+
+def shift_band(value: int, steps: int) -> int:
+    """Shift a band value up or down the ladder by `steps`."""
+    i = BAND_LADDER.index(value)
+    return BAND_LADDER[max(0, min(len(BAND_LADDER) - 1, i + steps))]
+
+
 # APPLY MATPLOTLIB STYLE AND PARAMS
 def apply_style() -> None:
+    """Apply the global matplotlib style and parameters."""
     plt.style.use(PLOT_STYLE)
     plt.rcParams.update({
         "figure.dpi": DPI,
@@ -188,11 +196,8 @@ def finish(fig, ax_or_axes, path: Path, note: str | None = None) -> Path:
     return path
 
 
-# =============================================================================
-# LOADING
-# =============================================================================
-
 def _load_sheet_rows(wb, sheet_name: str):
+    """Load a worksheet and return (header, body) as lists of tuples."""
     if sheet_name not in wb.sheetnames:
         return None, None
     ws = wb[sheet_name]
@@ -221,7 +226,7 @@ def _load_sheet_rows(wb, sheet_name: str):
     body = [r for r in rows[1:] if any(v is not None and str(v).strip() != "" for v in r)]
     return header, body
 
-
+# HELPER FUNCTIONS
 def _normalize_cell(v):
     """Normalise a cell: trailing spaces stripped, blanks and 'N/A' to None."""
     if v is None:
@@ -234,11 +239,12 @@ def _normalize_cell(v):
 
 
 def _split_list(v) -> list[str]:
+    """Split a comma-separated cell into a list of stripped strings."""
     if v is None:
         return []
     return [p.strip() for p in str(v).split(",") if p.strip()]
 
-
+# DATA CLASSES
 class Leaf:
     """One row of the Attack Leaf Risk Matrix."""
 
@@ -260,12 +266,8 @@ class Leaf:
         feat = _normalize_cell(rec.get(C_FEATURE))
         self.feature = None if feat in (None, "None") else str(feat).strip()
         self.confidence = _normalize_cell(rec.get(C_CONFIDENCE))
-
-        # Per-variant status / likelihood / risk. A variant where the leaf does
-        # not exist (AN-7 before the mediating service) stays None and is
-        # excluded from every total rather than counted as zero.
         self.status, self.likelihood, self.risk = {}, {}, {}
-        for name, scol, lcol, rcol in VARIANTS:
+        for name, scol, lcol, rcol in VARIANTS: # status, likelihood, risk
             st = rec.get(scol)
             st = str(st).strip() if st is not None else None
             if st in (None, "", MEDIATION_STATUS_NA):
@@ -279,16 +281,20 @@ class Leaf:
 
     @property
     def is_condition(self) -> bool:
+        """Return True if this leaf is a conditional risk, False otherwise."""
         return self.type.lower().startswith("cond")
 
     @property
     def is_frequency(self) -> bool:
+        """Return True if this leaf is a frequency risk, False otherwise."""
         return self.type.lower().startswith("freq")
 
     def present(self, variant: str) -> bool:
+        """Return True if this leaf has a risk value for the given variant, False otherwise."""
         return self.risk.get(variant) is not None
 
     def short(self, width: int = 46) -> str:
+        """Return a shortened version of the description, suitable for plotting."""
         return textwrap.shorten(self.desc, width=width, placeholder="...")
 
     def __repr__(self):
@@ -308,14 +314,17 @@ class Node:
 
     @property
     def is_root(self) -> bool:
+        """Return True if this node is a root node, False otherwise."""
         return self.node_type.lower() == "root"
 
     @property
     def is_gate(self) -> bool:
+        """Return True if this node is a gate node, False otherwise."""
         return self.node_type.lower() == "gate"
 
     @property
     def is_leaf(self) -> bool:
+        """Return True if this node is a leaf node, False otherwise."""
         return self.node_type.lower() == "leaf"
 
     def __repr__(self):
@@ -332,26 +341,22 @@ class Model:
         hdr, body = _load_sheet_rows(wb, SHEET_LEAF)
         if hdr is None:
             raise SystemExit(f"worksheet '{SHEET_LEAF}' not found in {workbook}")
-        self.leaves = [Leaf(dict(zip(hdr, r))) for r in body if r and r[0]]
+        self.leaves = [Leaf(dict(zip(hdr, r))) for r in body if r and r[0]] # skip blank rows
         self.by_id = {lf.id: lf for lf in self.leaves}
 
         hdr, body = _load_sheet_rows(wb, SHEET_TREE)
         if hdr is None:
             raise SystemExit(f"worksheet '{SHEET_TREE}' not found in {workbook}")
-        self.nodes = [Node(dict(zip(hdr, r))) for r in body if r and r[0]]
+        self.nodes = [Node(dict(zip(hdr, r))) for r in body if r and r[0]] # skip blank rows
         self.node_by_id = {n.id: n for n in self.nodes}
         self.roots = [n.id for n in self.nodes if n.is_root]
 
-        # Trees, ordered as the roots appear in the structure sheet, with any
-        # tree referenced only from the leaf matrix appended.
-        self.trees = list(self.roots)
+        self.trees = list(self.roots) # all trees are roots, but some leaves may reference additional trees
         for lf in self.leaves:
             for t in lf.trees:
                 if t not in self.trees:
                     self.trees.append(t)
 
-        # Optional edge table. Without it, tree-level scores are membership
-        # aggregates only; gate propagation needs parent/child relationships.
         self.edges = []
         hdr, body = _load_sheet_rows(wb, SHEET_EDGES)
         if hdr is not None:
@@ -361,9 +366,6 @@ class Model:
                     normalize_canonical(E_CHILD): E_CHILD}
             missing = [label for key, label in need.items() if key not in cols]
             if missing:
-                # The sheet exists but cannot be read. Skipping it silently
-                # would make propagation disappear with no explanation, which
-                # looks identical to never having added the sheet at all.
                 raise SystemExit(
                     f"\nworksheet '{SHEET_EDGES}' is present but missing required "
                     f"column(s): {', '.join(missing)}\n\n"
@@ -388,9 +390,6 @@ class Model:
                     "tree": str(tree).strip(),
                     "parent_id": str(parent).strip(),
                     "child_id": str(child).strip(),
-                    # Fall back to sheet order when the column is absent or
-                    # blank, so an unnumbered edge list still loads in the
-                    # order it was written rather than collapsing to zero.
                     "child_order": order if isinstance(order, (int, float)) else i,
                 })
 
@@ -403,16 +402,7 @@ class Model:
         self._check_cached_values()
 
     def _check_cached_values(self) -> None:
-        """
-        Abort loudly if the workbook's computed cells came back empty.
-
-        The scoring columns in the leaf matrix are Excel FORMULAS. Reading them
-        relies on the cached result Excel stores next to each formula. Some
-        tools -- openpyxl among them -- drop that cache when they save, leaving
-        the formulas intact but every value blank. The scripts would then run
-        to completion and report zeros, which is a far worse outcome than
-        failing, so this check exists to make that failure impossible to miss.
-        """
+        """Check that the workbook has cached values for the scoring columns."""
         if not self.leaves:
             raise SystemExit(f"no leaf rows parsed from '{SHEET_LEAF}' in {self.workbook_path}")
         blank = [lf.id for lf in self.leaves if lf.impact is None]
@@ -432,60 +422,56 @@ class Model:
             "reason -- a script that appends the sheet will blank the whole model.\n"
         )
 
-    # -- convenience views --------------------------------------------------
 
     @property
     def has_edges(self) -> bool:
+        """Return True if the optional edge table is present, False otherwise."""
         return bool(self.edges)
+
 
     @property
     def variant_names(self) -> list[str]:
+        """Return the list of variant names in order."""
         return [v[0] for v in VARIANTS]
 
+
     def leaves_in(self, tree: str) -> list[Leaf]:
+        """Return the list of leaves that reference `tree` in their `Attack Trees` field."""
         return [lf for lf in self.leaves if tree in lf.trees]
+
 
     def common_leaves(self) -> list[Leaf]:
         """Leaves scored under every variant -- the only like-for-like set."""
         return [lf for lf in self.leaves
                 if all(lf.present(v) for v in self.variant_names)]
 
+
     def variant_only_leaves(self, variant: str) -> list[Leaf]:
         """Leaves that exist under `variant` but not under the baseline."""
         return [lf for lf in self.leaves
                 if lf.present(variant) and not lf.present(BASELINE)]
 
+
     def total(self, variant: str, leaves=None) -> int:
+        """Return the total risk for a variant."""
         pool = self.leaves if leaves is None else leaves
         return sum(lf.risk[variant] for lf in pool if lf.present(variant))
 
+
     def tree_total(self, tree: str, variant: str) -> int:
-        """
-        Aggregate leaf risk for one tree: the sum of risk over leaves whose
-        `Attack Trees` field names this tree. A leaf shared by two trees counts
-        once in each, so tree totals deliberately do not sum to the grand total.
-        """
+        """Return the total risk for a variant under a tree."""
         return sum(lf.risk[variant] for lf in self.leaves_in(tree)
                    if lf.present(variant))
 
-    # -- gate propagation (requires the optional edge table) ----------------
 
     def propagate(self, tree: str, variant: str) -> dict[str, int | None]:
-        """
-        MIN/MAX propagation up one tree for one variant.
-
-            OR  gate -> MAX(children)   the easiest available path
-            AND gate -> MIN(children)   the weakest necessary link
-
-        MIN/MAX rather than probability arithmetic because the inputs are
-        ordinal bands, not calibrated probabilities (Mauw & Oostdijk 2005).
-        Returns {node_id: value}; None where a subtree has nothing scored.
-        """
+        """Propagate the leaf risk values up the tree, returning a dict of node_id -> value."""
         if not self.has_edges:
             raise RuntimeError("no edge table loaded; cannot propagate")
         memo: dict[str, int | None] = {}
 
         def walk(node_id: str, seen: frozenset) -> int | None:
+            """Recursively walk the tree, returning the propagated value for `node_id`."""
             if node_id in memo:
                 return memo[node_id]
             if node_id in seen:
