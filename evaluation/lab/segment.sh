@@ -1,25 +1,73 @@
 #!/usr/bin/env bash
 #
-# Description: Segment the lab into operator / fabrication / storage networks and switch control variants for evaluation runs.
+# Description: Segment the lab into operator / fabrication / storage networks and
+#              switch solution variants for evaluation runs.
 #
 # Arguments:
-#   setup: verify segment addressing + enable AP isolation (run once)
-#   baseline: permissive policy — current improvised practice
-#   minimal: ingress/egress controls only
-#   full: complete mediation — operator reaches nothing directly
-#   status: show current state
-#   teardown: remove segmentation, restore the per-segment firewalls
+#   setup:         verify segment addressing + enable AP isolation (run once)
+#   baseline:      no service — current improvised practice
+#   observational: service observes; workflow unconstrained
+#   mediated:      service is the sole path to storage and equipment
+#   status:        show current state
+#   teardown:      remove segmentation, restore the per-segment firewalls
 #
 # Usage Examples:
-#   sudo ./lab_segment.sh setup
-#   sudo ./lab_segment.sh full
-#   sudo ./lab_segment.sh status
+#   sudo ./segment.sh setup
+#   sudo ./segment.sh mediated
+#   sudo ./segment.sh status
 #
 # Network model (cao 2026-10-13):
 #   Operator     192.168.67.0/24   LAB-NET   wlan1   lab-ap      DHCP via NM shared
 #   Fabrication  192.168.68.0/24   LAB-NET2  wlan2   lab-ap2     DHCP via NM shared
 #   Storage      172.16.0.0/16     wired     eth0    lab-wired   static, Pi 2 NAS
 #   Uplink       10.0.0.0/24       home      wlan0   (client)
+#
+# ---------------------------------------------------------------------------
+# WHAT EACH VARIANT DOES TO THE NETWORK, AND WHY
+#
+#   baseline       Flat. The operator reaches equipment and storage directly.
+#                  No service is running. This is the improvised practice the
+#                  project is measured against.
+#
+#   observational  THE FORWARD POLICY IS DELIBERATELY IDENTICAL TO BASELINE.
+#                  The observational variant watches; it does not constrain the
+#                  workflow. If this mode blocked operator->fabrication, the
+#                  firewall would be performing the mediation and the variant
+#                  comparison would be measuring nftables rather than the
+#                  software. The difference between baseline and observational
+#                  is entirely in what is RUNNING, not in what is PERMITTED,
+#                  and that is a finding worth reporting rather than a gap.
+#
+#                  The one thing this mode does check is that the share is
+#                  mounted read-only: a service attesting to the integrity of
+#                  a share it can write to is asserting something it cannot
+#                  support.
+#
+#   mediated       The operator reaches nothing directly. This is where "the
+#                  service is the sole path" stops being a claim in the design
+#                  document and becomes true in fact — the application cannot
+#                  enforce it, the network can. Only the Pi (or MEDIATOR_IP)
+#                  reaches fabrication and storage.
+#
+# WAN EGRESS IS NOT A VARIANT PROPERTY
+#   Per-segment internet access is held CONSTANT across all three variants,
+#   because it is a property of the modelled environment rather than of the
+#   solution. Varying it alongside the mediation policy would confound the
+#   comparison: any measured difference could then be the WAN rule rather than
+#   the mediation.
+#
+#     operator    -> WAN   PERMITTED by default. Makerspace workstations have
+#                          internet, and that is how downloaded models arrive
+#                          (attack leaf L-019). Blocking it here would remove a
+#                          threat path the model depends on.
+#     fabrication -> WAN   DENIED by default. Printers are cloud-denied in the
+#                          modelled environment (interview I-02).
+#     storage     -> WAN   DENIED by default. The NAS has no reason to
+#                          originate toward the internet.
+#
+#   Override with OPER_WAN / FAB_WAN / STOR_WAN if the lab needs to differ, and
+#   say so in the write-up if you do.
+# ---------------------------------------------------------------------------
 
 set -euo pipefail
 
@@ -36,12 +84,32 @@ FAB_NET="${FAB_NET:-192.168.68.0/24}" # fabrication segment
 STOR_ADDR="${STOR_ADDR:-172.16.0.1/16}" # Pi's address on the storage segment
 
 # Mediating service location. Empty = on the Pi itself (default).
+# When the service runs on the Pi it is the router, so its own traffic is
+# output rather than forward and needs no rule here. Set this only if the
+# service is moved to a host on one of the segments.
 MEDIATOR_IP="${MEDIATOR_IP:-}"
 
+# Per-segment WAN policy. Constant across variants on purpose — see the header.
+OPER_WAN="${OPER_WAN:-permit}"
+FAB_WAN="${FAB_WAN:-deny}"
+STOR_WAN="${STOR_WAN:-deny}"
+
 # Networks that are blocked from the lab segments. The build scripts block these via their own tables, which labseg deletes and replaces with its own rules.
+# Note this blocks traffic TO the home LAN, not traffic THROUGH it: an
+# internet-bound packet has a public destination and is not matched here, so
+# the operator segment still reaches the internet while being unable to touch
+# anything on the home network.
 BLOCK_NETS="${BLOCK_NETS:-10.0.0.0/8, 169.254.0.0/16, 100.64.0.0/10}"
 
 LOG_DROPS="${LOG_DROPS:-1}" # 1 = log blocked attempts (rate-limited)
+
+# Where the service mounts the Samba share, so the mount options can be checked
+# against the variant. Must match config.REPOSITORY_PATH in the solution.
+REPO_MOUNT="${REPO_MOUNT:-/mnt/makerspace}"
+
+# The solution's config.py, cross-checked so the network variant and the
+# software variant cannot silently disagree. Empty to skip the check.
+SOLUTION_CONFIG="${SOLUTION_CONFIG:-}"
 
 # State files and hook locations
 STATE_DIR="/etc/lab-segment"
@@ -49,13 +117,15 @@ NFT_FILE="${STATE_DIR}/labseg.nft"
 VARIANT_FILE="${STATE_DIR}/variant"
 HOOK="/etc/NetworkManager/dispatcher.d/95-lab-segment"
 
-# The build scripts create their own tables to enforce per-segment firewalls. labseg deletes those tables and replaces them with its own rules, so it must know which tables to remove. 
+# The build scripts create their own tables to enforce per-segment firewalls. labseg deletes those tables and replaces them with its own rules, so it must know which tables to remove.
 SUBSUMED_TABLES=("inet labfw_lab_ap" "inet labfw_lab_ap2" "inet labwired" "inet labfw")
 BUILD_HOOKS=(
   "/etc/NetworkManager/dispatcher.d/90-lab-ap-fw:${OPER_CON}"
   "/etc/NetworkManager/dispatcher.d/90-lab-ap2-fw:${FAB_CON}"
   "/etc/NetworkManager/dispatcher.d/91-lab-wired-fw:${STOR_CON}"
 )
+
+VARIANTS=(baseline observational mediated)
 
 # Logging helpers
 log()  { printf '\e[1;32m[+]\e[0m %s\n' "$*"; }
@@ -182,20 +252,24 @@ emit_accept() { # $1=saddr expr  $2=daddr expr  $3=comment
 # Generate the nftables ruleset for the given variant. This creates a table inet labseg with a forward chain that implements the segmentation policy, and a table ip labseg_nat that implements NAT for the storage segment. The generated ruleset is written to $NFT_FILE.
 gen_ruleset() {
   local variant="$1" up_if
-  local oper_fab oper_stor oper_wan fab_wan stor_wan reverse
+  local oper_fab oper_stor reverse
   up_if="$(uplink_iface)"
 
   case "$variant" in
     baseline)
       # Flat behaviour: everything permitted, both directions. A control that
       # blocked reverse-initiated traffic would not represent a flat network.
-      oper_fab=accept; oper_stor=accept; oper_wan=accept; fab_wan=accept; stor_wan=accept; reverse=accept ;;
-    minimal)
-      # Ingress/egress controls only. Print submission still direct.
-      oper_fab=accept; oper_stor=accept; oper_wan=block;  fab_wan=block;  stor_wan=block;  reverse=block ;;
-    full)
-      # Complete mediation. Operator reaches nothing directly.
-      oper_fab=block;  oper_stor=block;  oper_wan=block;  fab_wan=block;  stor_wan=block;  reverse=block ;;
+      oper_fab=accept; oper_stor=accept; reverse=accept ;;
+    observational)
+      # Identical to baseline, deliberately. The observational variant
+      # observes; it does not constrain the workflow. Blocking anything here
+      # would make the firewall do the mediation, and the variant comparison
+      # would then measure nftables rather than the software.
+      oper_fab=accept; oper_stor=accept; reverse=accept ;;
+    mediated)
+      # The service is the sole path. This is the enforcement the application
+      # cannot provide for itself.
+      oper_fab=block;  oper_stor=block;  reverse=block ;;
     *) die "Unknown variant '${variant}'." ;;
   esac
 
@@ -204,8 +278,13 @@ gen_ruleset() {
   {
     cat <<NFT
 #!/usr/sbin/nft -f
-# Generated by lab_segment.sh — variant: ${variant}
+# Generated by segment.sh — variant: ${variant}
 # Do not edit; regenerate with: sudo $0 ${variant}
+#
+# WAN policy (constant across variants, so it cannot confound the comparison):
+#   operator    -> WAN  ${OPER_WAN}
+#   fabrication -> WAN  ${FAB_WAN}
+#   storage     -> WAN  ${STOR_WAN}
 #
 # The create-then-delete pairs below are the idiomatic way to drop a table that
 # may or may not exist: creating it first makes the delete unconditional.
@@ -230,7 +309,9 @@ table inet labseg {
     ct state established,related counter accept
 NFT
 
-    # Mediator exception: only needed if the service is NOT on the Pi.
+    # Mediator exception: only needed if the service is NOT on the Pi. When it
+    # is on the Pi, the Pi is the router and its traffic never traverses the
+    # forward chain at all.
     [[ -n $MEDIATOR_IP ]] && \
       echo "    ip saddr ${MEDIATOR_IP} counter accept comment \"mediating service\""
 
@@ -240,13 +321,13 @@ NFT
     if [[ $oper_fab == block ]]; then
       emit_block "ip saddr ${OPER_NET}" "ip daddr ${FAB_NET}" "$REJ" "oper->fab blocked (${variant})"
     else
-      emit_accept "ip saddr ${OPER_NET}" "ip daddr ${FAB_NET}" "oper->fab permitted"
+      emit_accept "ip saddr ${OPER_NET}" "ip daddr ${FAB_NET}" "oper->fab permitted (${variant})"
     fi
 
     if [[ $oper_stor == block ]]; then
       emit_block "ip saddr ${OPER_NET}" "ip daddr ${STOR_NET}" "$REJ" "oper->storage blocked (${variant})"
     else
-      emit_accept "ip saddr ${OPER_NET}" "ip daddr ${STOR_NET}" "oper->storage permitted"
+      emit_accept "ip saddr ${OPER_NET}" "ip daddr ${STOR_NET}" "oper->storage permitted (${variant})"
     fi
 
     echo
@@ -258,33 +339,47 @@ NFT
       emit_block "ip saddr ${STOR_NET}" "ip daddr ${OPER_NET}" "drop" "storage->oper never initiated"
       emit_block "ip saddr ${STOR_NET}" "ip daddr ${FAB_NET}"  "drop" "storage->fab never"
     else
-      emit_accept "ip saddr ${FAB_NET}"  "ip daddr ${OPER_NET}" "fab->oper permitted (baseline)"
-      emit_accept "ip saddr ${FAB_NET}"  "ip daddr ${STOR_NET}" "fab->storage permitted (baseline)"
-      emit_accept "ip saddr ${STOR_NET}" "ip daddr ${OPER_NET}" "storage->oper permitted (baseline)"
-      emit_accept "ip saddr ${STOR_NET}" "ip daddr ${FAB_NET}"  "storage->fab permitted (baseline)"
+      emit_accept "ip saddr ${FAB_NET}"  "ip daddr ${OPER_NET}" "fab->oper permitted (${variant})"
+      emit_accept "ip saddr ${FAB_NET}"  "ip daddr ${STOR_NET}" "fab->storage permitted (${variant})"
+      emit_accept "ip saddr ${STOR_NET}" "ip daddr ${OPER_NET}" "storage->oper permitted (${variant})"
+      emit_accept "ip saddr ${STOR_NET}" "ip daddr ${FAB_NET}"  "storage->fab permitted (${variant})"
     fi
 
     echo
 
+    # --- home-LAN protection (subsumes the build scripts' block lists) --------
+    # MUST precede the WAN rules. The WAN rules match on the outbound
+    # interface, and traffic to a home-LAN host leaves by that same interface,
+    # so an accept there would let operator traffic onto the home network
+    # before this rule was ever reached. Destination-based denials go first;
+    # interface-based permits go last.
+    cat <<NFT
+    ip saddr { ${OPER_NET}, ${FAB_NET}, ${STOR_NET} } ip daddr { ${BLOCK_NETS} } counter ${REJ} comment "home LAN protection"
+
+NFT
+
     # --- WAN egress -----------------------------------------------------------
+    # Held constant across variants. See the header for why.
     if [[ -n $up_if ]]; then
       local seg name net pol
-      for seg in "OPER:${OPER_NET}:${oper_wan}" "FAB:${FAB_NET}:${fab_wan}" "STOR:${STOR_NET}:${stor_wan}"; do
+      for seg in "OPER:${OPER_NET}:${OPER_WAN}" "FAB:${FAB_NET}:${FAB_WAN}" "STOR:${STOR_NET}:${STOR_WAN}"; do
         IFS=: read -r name net pol <<<"$seg"
-        if [[ $pol == block ]]; then
-          emit_block "ip saddr ${net}" "oifname \"${up_if}\"" "$REJ" "${name} WAN denied"
+        if [[ $pol == deny ]]; then
+          emit_block "ip saddr ${net}" "oifname \"${up_if}\"" "$REJ" "${name} WAN denied (environment)"
         else
-          emit_accept "ip saddr ${net}" "oifname \"${up_if}\"" "${name} WAN permitted (baseline)"
+          emit_accept "ip saddr ${net}" "oifname \"${up_if}\"" "${name} WAN permitted (environment)"
         fi
       done
     else
       echo "    # no default route at generation time — WAN rules omitted"
     fi
 
-    # --- home-LAN protection (subsumes the build scripts' block lists) --------
+    # --- IPv6 -----------------------------------------------------------------
+    # Every rule above matches on `ip saddr`, so an IPv6 packet matches none of
+    # them and would ride the accept policy straight through. The segmentation
+    # is an IPv4 claim; this keeps v6 from quietly falsifying it.
     cat <<NFT
 
-    ip saddr { ${OPER_NET}, ${FAB_NET}, ${STOR_NET} } ip daddr { ${BLOCK_NETS} } counter ${REJ} comment "home LAN protection"
     iifname { ${LAB_IFACES} } meta nfproto ipv6 counter drop
   }
 }
@@ -320,11 +415,77 @@ NFT
   chmod 0644 "$NFT_FILE"
 }
 
+# Check the share mount against what the variant expects. The observational
+# variant must not be able to write to the share it is attesting to; the
+# mediated variant has to write, because it is the sanctioned write path.
+# This is advisory: a wrong mount is a measurement problem, not a reason to
+# refuse to configure the network.
+check_repo_mount() {
+  local variant="$1" opts
+  opts="$(findmnt -no OPTIONS --target "$REPO_MOUNT" 2>/dev/null || true)"
+  if [[ -z $opts ]]; then
+    case "$variant" in
+      observational|mediated)
+        warn "${REPO_MOUNT} is not mounted. The service cannot snapshot the share."
+        echo "       sudo mount -a   (check /etc/fstab)" >&2 ;;
+    esac
+    return
+  fi
+  case "$variant" in
+    observational)
+      if [[ ,$opts, == *,ro,* ]]; then
+        log "Share ${REPO_MOUNT} is read-only — correct for observational."
+      else
+        warn "Share ${REPO_MOUNT} is mounted READ-WRITE but the variant is observational."
+        echo "       A service that attests to the integrity of a share it can write to is" >&2
+        echo "       asserting something it cannot support. Remount with 'ro':" >&2
+        echo "       sudo mount -o remount,ro ${REPO_MOUNT}" >&2
+      fi ;;
+    mediated)
+      if [[ ,$opts, == *,ro,* ]]; then
+        warn "Share ${REPO_MOUNT} is READ-ONLY but the variant is mediated."
+        echo "       The service is the sanctioned write path and needs to write:" >&2
+        echo "       sudo mount -o remount,rw ${REPO_MOUNT}" >&2
+      else
+        log "Share ${REPO_MOUNT} is writable — correct for mediated."
+      fi ;;
+  esac
+}
+
+# Cross-check the network variant against the solution's own VARIANT. Running
+# the mediated firewall with observational software (or the reverse) produces
+# evaluation data that looks valid and is not, so it is worth catching here.
+check_solution_variant() {
+  local variant="$1" cfg sw
+  cfg="$SOLUTION_CONFIG"
+  if [[ -z $cfg ]]; then
+    local here; here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    for cfg in "${here}/../../solution/config.py" "${here}/../solution/config.py" \
+               "/opt/fabguard/config.py"; do
+      [[ -f $cfg ]] && break || cfg=""
+    done
+  fi
+  [[ -n $cfg && -f $cfg ]] || return 0
+
+  sw="$(grep -oP '^VARIANT\s*=\s*"\K[a-z]+' "$cfg" 2>/dev/null | head -1)"
+  [[ -n $sw ]] || return 0
+
+  if [[ $variant == baseline ]]; then
+    log "Solution config says VARIANT=\"${sw}\" — stop the service for a baseline run."
+  elif [[ $sw != "$variant" ]]; then
+    warn "MISMATCH: network variant is '${variant}' but ${cfg} says VARIANT=\"${sw}\"."
+    echo "       Evaluation data from this combination will look valid and will not be." >&2
+    echo "       Set VARIANT = \"${variant}\" in config.py and restart the service." >&2
+  else
+    log "Solution config agrees: VARIANT=\"${sw}\"."
+  fi
+}
+
 # Hook to reapply segmentation after a segment reconnects. This is needed because the build scripts' hooks (90-/91-) run after labseg's hook, so they would overwrite labseg's rules on reconnect. This hook runs after 90-/91- and reapplies the labseg ruleset.
 install_hook() {
   cat > "$HOOK" <<EOF
 #!/bin/sh
-# Managed by lab_segment.sh — reapplies segmentation after a segment reconnects.
+# Managed by segment.sh — reapplies segmentation after a segment reconnects.
 # Sorts after 90-/91- so it replaces the tables those hooks just installed.
 case "\$CONNECTION_ID" in
   ${OPER_CON}|${FAB_CON}|${STOR_CON}) ;;
@@ -359,6 +520,23 @@ do_variant() {
 
   log "Variant '${variant}' active"
   echo
+
+  check_repo_mount "$variant"
+  check_solution_variant "$variant"
+  echo
+
+  if [[ $variant == observational ]]; then
+    cat <<EOF
+    NOTE: this ruleset is byte-for-byte the baseline policy, on purpose.
+    The observational variant observes; it does not constrain the workflow.
+    If the firewall blocked operator->fabrication here, the firewall would be
+    doing the mediation and the comparison would measure nftables rather than
+    the software. Report that as a finding: the observational variant needs
+    no network change, which is a large part of why its friction is low.
+
+EOF
+  fi
+
   nft list table inet labseg 2>/dev/null | sed 's/^/    /'
   echo
   cat <<EOF
@@ -377,6 +555,8 @@ do_status() {
 
   Variant          ${variant}
   Uplink           $(uplink_iface)
+  WAN policy       operator ${OPER_WAN} · fabrication ${FAB_WAN} · storage ${STOR_WAN}
+                   (constant across variants — environment, not solution)
 
   Segment       Connection   Iface   Network            AP isolation
   Operator      ${OPER_CON}       ${OPER_IF}    ${OPER_NET}     $(nmcli -g 802-11-wireless.ap-isolation con show id "$OPER_CON" 2>/dev/null || echo '-')
@@ -390,6 +570,11 @@ EOF
   for i in "$OPER_IF" "$FAB_IF" "$STOR_IF"; do
     ip -4 -br addr show dev "$i" 2>/dev/null | sed 's/^/    /'
   done
+
+  echo
+  printf '  Share %s: %s\n' "$REPO_MOUNT" \
+    "$(findmnt -no OPTIONS --target "$REPO_MOUNT" 2>/dev/null || echo 'not mounted')"
+  [[ $variant != '<none>' ]] && { check_repo_mount "$variant"; check_solution_variant "$variant"; }
 
   echo
   if nft list table inet labseg >/dev/null 2>&1; then
@@ -442,40 +627,76 @@ do_teardown() {
 
 # Dispatch the command line to the appropriate function. The first argument is the command, and the rest are passed to that function.
 case "${1:-}" in
-  setup)                 do_setup ;;
-  baseline|minimal|full) do_variant "$1" ;;
-  status)                do_status ;;
-  teardown)              do_teardown ;;
+  setup)                              do_setup ;;
+  baseline|observational|mediated)    do_variant "$1" ;;
+  status)                             do_status ;;
+  teardown)                           do_teardown ;;
+  minimal|full)
+    # Renamed in step with the solution architecture. Deliberately refused
+    # rather than aliased: the semantics changed as well as the names, so
+    # silently running different rules under an old name would corrupt a
+    # comparison against earlier runs.
+    cat >&2 <<EOF
+[x] '$1' no longer exists. The variants now follow the solution architecture:
+
+      minimal  ->  observational   NOT a rename. 'minimal' blocked WAN egress and
+                                   reverse-initiated traffic; 'observational' is
+                                   deliberately identical to baseline, because the
+                                   observational variant does not constrain the
+                                   workflow. Earlier 'minimal' runs are not
+                                   comparable to 'observational' runs.
+
+      full     ->  mediated        Same intent, same operator-facing policy. WAN
+                                   egress is now held constant across variants
+                                   instead of being denied only here, so 'full'
+                                   runs differ from 'mediated' runs on the WAN
+                                   rules alone.
+
+    Re-run any earlier measurements you intend to compare.
+EOF
+    exit 1 ;;
   *)
     cat <<EOF
-Usage: sudo $0 {setup|baseline|minimal|full|status|teardown}
+Usage: sudo $0 {setup|baseline|observational|mediated|status|teardown}
 
-  setup      Verify segment addressing and enable AP isolation. Run once.
+  setup          Verify segment addressing and enable AP isolation. Run once.
 
-  baseline   Permissive — current improvised practice (flat network).
-               operator <-> fabrication   permitted
-               operator <-> storage       permitted
-               fabrication <-> storage    permitted
-               all segments -> WAN        permitted
+  baseline       No service. Current improvised practice (flat network).
+                   operator <-> fabrication   permitted
+                   operator <-> storage       permitted
+                   fabrication <-> storage    permitted
 
-  minimal    Ingress/egress controls only.
-               operator -> fabrication    permitted (print submission direct)
-               operator -> storage        permitted
-               reverse-initiated          DENIED
-               all segments -> WAN        DENIED
+  observational  Service observes; workflow unconstrained.
+                   FORWARD POLICY IDENTICAL TO BASELINE, on purpose.
+                   The observational variant watches, it does not mediate. A
+                   firewall that blocked the workflow here would be doing the
+                   mediation itself, and the comparison would measure nftables
+                   rather than the software.
+                   Share should be mounted read-only; checked, not enforced.
 
-  full       Complete mediation.
-               operator -> fabrication    DENIED
-               operator -> storage        DENIED
-               reverse-initiated          DENIED
-               all segments -> WAN        DENIED
-               (mediating service on the Pi reaches everything)
+  mediated       Service is the sole path to storage and equipment.
+                   operator -> fabrication    DENIED
+                   operator -> storage        DENIED
+                   reverse-initiated          DENIED
+                   (the service on the Pi reaches everything)
+                   This is where "sole path" stops being a design claim and
+                   becomes true in fact. Share must be mounted read-write.
 
-  status     Show addressing, AP isolation, active variant, rule counters.
-  teardown   Remove segmentation; restore per-segment firewalls.
+  status         Show addressing, AP isolation, active variant, rule counters,
+                 share mount, and whether the solution's config.py agrees.
+  teardown       Remove segmentation; restore per-segment firewalls.
+
+WAN egress is held CONSTANT across all three variants, because it belongs to
+the modelled environment rather than to the solution. Varying it alongside the
+mediation policy would confound the comparison.
+   operator    -> WAN  ${OPER_WAN}   workstations have internet; this is how
+                              downloaded models arrive (leaf L-019)
+   fabrication -> WAN  ${FAB_WAN}      printers are cloud-denied (interview I-02)
+   storage     -> WAN  ${STOR_WAN}      the NAS never originates outbound
 
 Env: OPER_CON FAB_CON STOR_CON OPER_NET FAB_NET STOR_ADDR
-     MEDIATOR_IP BLOCK_NETS LOG_DROPS
+     OPER_WAN FAB_WAN STOR_WAN MEDIATOR_IP BLOCK_NETS LOG_DROPS
+     REPO_MOUNT SOLUTION_CONFIG
 EOF
     exit 1 ;;
 esac

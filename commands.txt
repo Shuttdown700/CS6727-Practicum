@@ -1,0 +1,15 @@
+From the root directory:
+
+
+START A CAPTURE:
+    BASIC: sudo ./evaluation/lab/capture.sh start
+
+SEGMENT THE NETWORK:
+    VERIFY SETUP (only run once): sudo ./evaluation/lab/segment.sh setup
+    NETWORK SETUP BASELINE VARIANT: sudo ./evaluation/lab/segment.sh baseline
+    NETWORK SETUP OBS. VARIANT: sudo ./evaluation/lab/segment.sh observational
+    NETWORK SETUP MED. VARIANT: sudo ./evaluation/lab/segment.sh mediated
+
+
+
+
