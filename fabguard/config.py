@@ -47,8 +47,8 @@ FIRMWARE_STORE = DATA_DIR / "firmware"          # recorded firmware images
 # REPOSITORY (the Samba share on the second Pi)
 # =============================================================================
 #   sudo apt install cifs-utils
-#   sudo mkdir -p /mnt/makerspace
-#   sudo mount -t cifs //192.168.50.20/designs /mnt/makerspace \
+#   sudo mkdir -p /mnt/labnas
+#   sudo mount -t cifs //192.168.50.20/designs /mnt/labnas \
 #        -o credentials=/etc/fabguard-smb.cred,uid=fabguard,gid=fabguard,vers=3.1.1
 #
 # OBSERVATIONAL: mount read-only (add `ro`). A service that attests to the
@@ -59,7 +59,7 @@ FIRMWARE_STORE = DATA_DIR / "firmware"          # recorded firmware images
 # the share's own ACL, which is what makes the service "sole path" in fact
 # rather than only in policy.
 
-REPOSITORY_PATH = Path("/mnt/makerspace")
+REPOSITORY_PATH = Path("/mnt/labnas")
 
 REPOSITORY_HASH_EXTENSIONS = {
     ".3mf", ".stl", ".step", ".stp", ".gcode", ".bgcode", ".obj",

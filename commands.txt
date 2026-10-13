@@ -1,10 +1,18 @@
-From the root directory:
+[Run all scripts from the root directory]
 
+SETUP PI 2 (NAS):
+    sudo ./setup.setup_pi2.sh
+
+SETUP PI 5:
+    sudo ./setup/setup_pi5_ap.sh
+    sudo ./setup/setup_pi5_eth.sh
+    sudo SMB_USER_LAB=bshutt3 SMB_PASS_LAB='cs6727bshutt3' LOCAL_USER=bshutt3 ./setup/mount_lab_store.sh
+    sudo SMB_USER=eratosthenes SMB_PASS='$huTTfliX700..' ./setup/mount_capture_store.sh
 
 START A CAPTURE:
     BASIC: sudo ./evaluation/lab/capture.sh start
 
-SEGMENT THE NETWORK:
+SEGMENT THE NETWORK BASED ON VARIANTS:
     VERIFY SETUP (only run once): sudo ./evaluation/lab/segment.sh setup
     NETWORK SETUP BASELINE VARIANT: sudo ./evaluation/lab/segment.sh baseline
     NETWORK SETUP OBS. VARIANT: sudo ./evaluation/lab/segment.sh observational
@@ -12,4 +20,5 @@ SEGMENT THE NETWORK:
 
 
 
+...WIP...
 

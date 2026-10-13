@@ -105,7 +105,7 @@ LOG_DROPS="${LOG_DROPS:-1}" # 1 = log blocked attempts (rate-limited)
 
 # Where the service mounts the Samba share, so the mount options can be checked
 # against the variant. Must match config.REPOSITORY_PATH in the solution.
-REPO_MOUNT="${REPO_MOUNT:-/mnt/makerspace}"
+REPO_MOUNT="${REPO_MOUNT:-/mnt/labnas}"
 
 # The solution's config.py, cross-checked so the network variant and the
 # software variant cannot silently disagree. Empty to skip the check.
