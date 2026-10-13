@@ -19,9 +19,9 @@ set -euo pipefail
 SERVER="${SERVER:-172.16.0.2}"
 SHARE="${SHARE:-labnas}"
 MOUNTPOINT="${MOUNTPOINT:-/mnt/labnas}"
-SMB_USER="${SMB_USER:-${SUDO_USER:-}}"
-SMB_PASS="${SMB_PASS:-}"
-LOCAL_USER="${LOCAL_USER:-${SUDO_USER:-}}"
+SMB_USER="${SMB_USER_LAB:-${SUDO_USER_LAB:-}}"
+SMB_PASS="${SMB_PASS_LAB:-}"
+LOCAL_USER="${LOCAL_USER:-${SUDO_USER_LAB:-}}"
 CRED_FILE="${CRED_FILE:-/etc/samba/creds/${SHARE}}"
 
 log()  { printf '\e[1;32m[+]\e[0m %s\n' "$*"; }
