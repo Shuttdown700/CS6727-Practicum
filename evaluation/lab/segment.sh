@@ -354,6 +354,45 @@ NFT
       printf 'table %s\ndelete table %s\n' "$t" "$t"
     done
 
+    # --- NetworkManager shared-mode tables ------------------------------------
+    # NM's "shared" IPv4 mode installs `table ip nm-shared-<iface>` with its own
+    # base chains, and labseg does not replace them by existing. Base chains are
+    # ALL traversed in priority order and an accept in one does not end
+    # evaluation, so labseg accepting at -20 means nothing once nm-shared
+    # rejects the same packet at 0. Its filter_forward ends with
+    #
+    #     iifname "<if>" reject
+    #     oifname "<if>" reject
+    #
+    # and a bare `reject` is ICMP port-unreachable -- which is exactly what an
+    # operator pinging the printer sees, from the Pi, in EVERY variant
+    # including baseline. Left in place it silently blocks operator ->
+    # fabrication throughout, so the baseline is not a flat network and the
+    # comparison measures NetworkManager.
+    #
+    # Its nat_postrouting is also wrong for this lab: it masquerades anything
+    # leaving the segment, so inter-segment traffic reaches the printer wearing
+    # the Pi's address and the machine cannot tell one workstation from
+    # another. labseg_nat below masquerades to the uplink only.
+    #
+    # Both chains are flushed rather than the table dropped, because NM owns
+    # the table and recreates it; an empty base chain with policy accept is
+    # inert. Declaring each chain first makes the flush unconditional, the same
+    # idiom as the create-then-delete pairs above. Priorities must match what
+    # NM uses (filter_forward 0, nat_postrouting 100) or the declaration
+    # collides with the existing chain.
+    local nmif
+    for nmif in "$OPER_IF" "$FAB_IF"; do
+      cat <<NFT
+table ip nm-shared-${nmif} {
+  chain filter_forward  { type filter hook forward     priority 0;   policy accept; }
+  chain nat_postrouting { type nat    hook postrouting priority 100; policy accept; }
+}
+flush chain ip nm-shared-${nmif} filter_forward
+flush chain ip nm-shared-${nmif} nat_postrouting
+NFT
+    done
+
     cat <<NFT
 
 table inet labseg
@@ -448,10 +487,11 @@ NFT
 NFT
 
     # --- NAT ------------------------------------------------------------------
-    # NM's "shared" mode already masquerades the two AP segments. The wired
-    # segment's masquerade came from `inet labwired`, which labseg deletes, so
-    # it is reproduced here. Scoped to the uplink only, so inter-segment traffic
-    # keeps its real source address and captures stay readable.
+    # All three segments masquerade here now, because nm-shared's own
+    # nat_postrouting was flushed above. Scoped to the uplink, so inter-segment
+    # traffic keeps its real source address: the printer sees the workstation
+    # that talked to it rather than the Pi, which is what makes equipment-side
+    # logs and packet captures worth anything during a break-glass window.
     if [[ -n $up_if ]]; then
       cat <<NFT
 
@@ -461,6 +501,8 @@ delete table ip labseg_nat
 table ip labseg_nat {
   chain postrouting {
     type nat hook postrouting priority srcnat - 10; policy accept;
+    ip saddr ${OPER_NET} oifname "${up_if}" counter masquerade
+    ip saddr ${FAB_NET}  oifname "${up_if}" counter masquerade
     ip saddr ${STOR_NET} oifname "${up_if}" counter masquerade
   }
 }
@@ -779,6 +821,22 @@ EOF
     echo "  Build-script tables present: ${present}"
     [[ $variant != '<none>' ]] && warn "These should have been subsumed — rerun: sudo $0 ${variant}"
   fi
+
+  # NM recreates its shared-mode rules whenever it feels like it, and they
+  # reject inter-segment forwarding at a later priority than labseg. A single
+  # rule back in either chain silently blocks operator -> fabrication in every
+  # variant, so this is worth checking every time rather than assuming.
+  local nmif n
+  for nmif in "$OPER_IF" "$FAB_IF"; do
+    n="$(nft list chain ip "nm-shared-${nmif}" filter_forward 2>/dev/null \
+         | grep -cE '^\s+(ip|iifname|oifname|ct)' || true)"
+    if [[ ${n:-0} -gt 0 ]]; then
+      warn "nm-shared-${nmif} filter_forward has ${n} rule(s) — NM has re-added them."
+      echo "       They reject inter-segment traffic at priority 0, after labseg at -20," >&2
+      echo "       which blocks operator->fabrication in EVERY variant. Rerun:" >&2
+      echo "       sudo $0 ${variant}" >&2
+    fi
+  done
   echo
 }
 
