@@ -91,7 +91,7 @@ PRINTERS = [
         "id": "mk4-01",
         "label": "Prusa MK4 (Bay 1)",
         "driver": "prusalink",
-        "host": "192.168.68.42",
+        "host": "192.168.68.43",
         "port": 80,
         "username": "maker",
         "password": "fF7HRmmXdPwry9L",

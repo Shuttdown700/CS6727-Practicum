@@ -23,3 +23,7 @@ SEGMENT THE NETWORK BASED ON VARIANTS:
 
 ...WIP...
 
+From root:
+
+source ./fabguard/venv/bin/activate
+[if needed] rm fabguard/data/events.jsonl
