@@ -94,7 +94,7 @@ PRINTERS = [
         "host": "192.168.68.43",
         "port": 80,
         "username": "maker",
-        "password": "fF7HRmmXdPwry9L",
+        "password": "fF7HRmmXdPWry9L",
         "storages": ["usb"],      # also "local" on printers with internal flash
         "timeout_s": 8.0,
         "upload_timeout_s": 180.0,

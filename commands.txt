@@ -1,3 +1,6 @@
+
+git add . ;  git commit -m "minor debug" ; git push origin main
+
 [Run all scripts from the root directory]
 
 SETUP PI 2 (NAS):
@@ -27,3 +30,4 @@ From root:
 
 source ./fabguard/venv/bin/activate
 [if needed] rm fabguard/data/events.jsonl
+sudo ./evaluation/lab/segment.sh baseline

@@ -47,7 +47,7 @@ the old content — nothing is ever deleted, so a revert is itself visible.</p>
       <td class="small">{{ d.current_published_by }}<br>
           <span class="muted">{{ d.current_published_ts }}</span></td>
       <td class="small">{{ d.version_count }}</td>
-      <td><a class="btn" href="{{ url_for('design_detail', did=d.id) }}">History</a></td>
+      <td><a class="btn" href="{{ url_for('design_detail', did=d.id) }}">Details</a></td>
     </tr>
     {% else %}<tr><td colspan="8" class="muted">Nothing published yet.</td></tr>{% endfor %}
   </table>
