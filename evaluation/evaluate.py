@@ -3,9 +3,12 @@
 Description: Ingest the Control Traceability Matrix workbook, score it, and
 write infographics (.png) plus raw score dumps (.txt) to ../output.
 
+Usage:
     python3 evaluate.py
 
-No arguments. All configuration lives in ctm_core.py.
+Usage Note:
+    No arguments. All configuration lives in core.py.
+    This script is intended to be run in the /evaluation directory, with the workbook in ../input and the output written to ../output.
 
 WHAT THIS PRODUCES
     fig01_aggregate_risk_bar.png      aggregate risk by variant, split by leaf type
@@ -118,14 +121,14 @@ def pct(new, old):
 # =============================================================================
 
 def fig_aggregate(m: Model):
-    """Grouped bar -- the headline comparison, on the like-for-like leaf set."""
+    """Grouped Bar Graph: aggregate risk by variant, split by leaf type."""
     common = m.common_leaves()
     freq = [lf for lf in common if lf.is_frequency]
     cond = [lf for lf in common if lf.is_condition]
 
-    cats = [f"Frequency leaves\n(n={len(freq)})",
-            f"Condition leaves\n(n={len(cond)})",
-            f"Common set\n(n={len(common)})"]
+    cats = [f"Frequency Leaves\n(n={len(freq)})",
+            f"Condition Leaves\n(n={len(cond)})",
+            f"Common Set\n(n={len(common)})"]
     vals = {v: [m.total(v, freq), m.total(v, cond), m.total(v, common)]
             for v in m.variant_names}
 
@@ -134,24 +137,25 @@ def fig_aggregate(m: Model):
     for c in bars.values():
         label_bars(ax, c, dy=3)
 
-    ax.set_ylabel("Aggregate leaf risk")
-    ax.set_title("Aggregate leaf risk by variant, common 47-leaf set")
+    ax.set_ylabel("Aggregate Leaf-Level Risk Score")
+    ax.set_title("Aggregate Leaf-Level Risk by Variant (Common 47-Leaf Set)")
     ax.legend(loc="upper left", ncols=3)
     ax.set_ylim(0, max(vals[C.BASELINE]) * 1.18)
 
     med_only = m.variant_only_leaves("Mediated")
-    note = (
-        "Frequency-leaf risk is constant by construction: the architecture does not change how often an event occurs, so the entire\n"
-        f"variant delta lives in the condition leaves. Condition-leaf reduction: observational {pct(m.total('Observational', cond), m.total(C.BASELINE, cond)):.1f}%, "
-        f"mediated {pct(m.total('Mediated', cond), m.total(C.BASELINE, cond)):.1f}%.\n"
-        f"Excluded here: {len(med_only)} leaves that exist only under the mediated variant and carry "
-        f"{m.total('Mediated', med_only)} points of introduced risk (see scores_summary.txt)."
-    )
+    # note = (
+    #     "Frequency-leaf risk is constant by construction: the architecture does not change how often an event occurs, so the entire\n"
+    #     f"variant delta lives in the condition leaves. Condition-leaf reduction: observational {pct(m.total('Observational', cond), m.total(C.BASELINE, cond)):.1f}%, "
+    #     f"mediated {pct(m.total('Mediated', cond), m.total(C.BASELINE, cond)):.1f}%.\n"
+    #     f"Excluded here: {len(med_only)} leaves that exist only under the mediated variant and carry "
+    #     f"{m.total('Mediated', med_only)} points of introduced risk (see scores_summary.txt)."
+    # )
+    note = None
     return C.finish(fig, ax, OUTPUT_DIR / "fig01_aggregate_risk_bar.png", note)
 
 
 def fig_tree_risk(m: Model):
-    """Grouped bar -- aggregate risk per tree."""
+    """Grouped Bar Graph: per-tree risk, grouped by variant. The tree-level view."""
     trees = m.trees
     vals = {v: [m.tree_total(t, v) for t in trees] for v in m.variant_names}
     cats = [f"{t}\n(n={len(m.leaves_in(t))})" for t in trees]
@@ -161,26 +165,26 @@ def fig_tree_risk(m: Model):
     for c in bars.values():
         label_bars(ax, c, dy=2, skip_zero=True)
 
-    ax.set_ylabel("Aggregate leaf risk")
-    ax.set_title("Aggregate leaf risk by attack tree and variant")
+    ax.set_ylabel("Aggregate Leaf-Level Risk Score")
+    ax.set_title("Aggregate Leaf-Level Risk by Attack Tree and Variant")
     ax.legend(loc="upper right", ncols=3)
     ax.set_ylim(0, max(max(v) for v in vals.values()) * 1.18)
 
-    note = ("Sum of leaf risk over leaves assigned to each tree. A leaf shared by two trees counts once in each, so tree totals do not\n"
-            "sum to the grand total. AN-7 is zero at baseline and observational because its leaves presuppose a mediating service to fail.")
+    # note = ("Sum of leaf risk over leaves assigned to each tree. A leaf shared by two trees counts once in each, so tree totals do not\n"
+    #         "sum to the grand total. AN-7 is zero at baseline and observational because its leaves presuppose a mediating service to fail.")
+    note = None
     return C.finish(fig, ax, OUTPUT_DIR / "fig02_tree_risk_bar.png", note)
 
 
 def fig_tree_delta(m: Model):
-    """Diverging horizontal bar -- change against baseline, per tree."""
+    """Diverging Bar Graph: per-tree change against baseline. The tree-level view."""
     variants = [v for v in m.variant_names if v != C.BASELINE]
     trees = m.trees
     fig, axes = plt.subplots(1, len(variants), figsize=(10.4, 4.2), sharex=True)
     if len(variants) == 1:
         axes = [axes]
 
-    def present(tree, variant):
-        """Does this tree have any leaf scored under this variant?"""
+    def present(tree, variant): # does this tree exist under this variant or baseline?
         return any(lf.present(variant) for lf in m.leaves_in(tree))
 
     allv = []
@@ -190,17 +194,14 @@ def fig_tree_delta(m: Model):
     lim = max(abs(min(allv)), abs(max(allv))) * 1.34 or 1
 
     absent = []
-    for ax, v in zip(axes, variants):
+    for ax, v in zip(axes, variants): # one subplot per variant
         y = np.arange(len(trees))
         for i, t in enumerate(trees):
-            # A tree with no leaves under either variant is NOT a zero change --
-            # it is not applicable. Drawing a zero bar would assert "no effect"
-            # where the honest statement is "does not exist yet".
             if not present(t, v) and not present(t, C.BASELINE):
                 absent.append((t, v))
-                ax.text(0, i, "  not applicable - tree absent under both",
-                        va="center", ha="left", fontsize=7.6, style="italic",
-                        color=INK_MUTED)
+                # ax.text(0, i, "  not applicable - tree absent under both",
+                #         va="center", ha="left", fontsize=7.6, style="italic",
+                #         color=INK_MUTED)
                 continue
             d = m.tree_total(t, v) - m.tree_total(t, C.BASELINE)
             col = DIV_ZERO if d == 0 else (DIV_GOOD if d < 0 else DIV_BAD)
@@ -214,15 +215,16 @@ def fig_tree_delta(m: Model):
         ax.invert_yaxis()
         ax.axvline(0, color=INK_SOFT, lw=1.1, zorder=4)
         ax.set_xlim(-lim, lim)
-        ax.set_title(f"{v} vs {C.BASELINE}", fontsize=10.5)
-        ax.set_xlabel("Change in aggregate leaf risk")
+        ax.set_title(f"{v} vs. {C.BASELINE}", fontsize=10.5)
+        ax.set_xlabel("Change in Aggregate Leaf-Level Risk")
 
-    fig.suptitle("Change in tree-level risk against baseline", y=1.02,
+    fig.suptitle("Change in Tree-Level Risk Against Baseline", y=1.02,
                  fontsize=12, fontweight="bold", color=INK)
-    note = ("Blue is a reduction, red an increase, grey no change. AN-7 increases under the mediated variant because the architecture\n"
-            "introduces a service that can fail -- a real cost of the design, not an artefact of the scoring."
-            + ("\nWhere a tree exists under neither variant it is marked not-applicable rather than drawn as a zero bar, which would "
-               "assert\nno effect where the honest statement is that the tree does not exist yet." if absent else ""))
+    # note = ("Blue is a reduction, red an increase, grey no change. AN-7 increases under the mediated variant because the architecture\n"
+    #         "introduces a service that can fail -- a real cost of the design, not an artefact of the scoring."
+    #         + ("\nWhere a tree exists under neither variant it is marked not-applicable rather than drawn as a zero bar, which would "
+    #            "assert\nno effect where the honest statement is that the tree does not exist yet." if absent else ""))
+    note = None
     return C.finish(fig, axes, OUTPUT_DIR / "fig03_tree_delta_bar.png", note)
 
 
@@ -326,7 +328,7 @@ def fig_leaf_delta(m: Model):
 
 
 def fig_coverage(m: Model):
-    """Stacked bar -- condition-leaf status counts. The breadth measure."""
+    """Stacked Bar Graph: condition-leaf status counts by variant."""
     variants = m.variant_names
     counts = {v: Counter(lf.status[v] for lf in m.leaves
                          if lf.is_condition and lf.status[v] in C.MEDIATION_STATUS_ORDER)
@@ -348,12 +350,13 @@ def fig_coverage(m: Model):
 
     ax.set_xticks(x)
     ax.set_xticklabels([f"{v}\n(n={int(sum(counts[v].values()))})" for v in variants])
-    ax.set_ylabel("Condition leaves")
-    ax.set_title("Condition-leaf control coverage by variant")
+    ax.set_ylabel("Condition Leaves")
+    ax.set_title("Condition-Leaf Control Coverage by Solution Variant")
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.13), ncols=3)
 
-    note = ("Counted over condition leaves only; frequency leaves have no control status. Report this beside the risk totals: the\n"
-            "observational variant moves nine leaves to Partial for a far smaller change in score, and neither measure alone is honest.")
+    # note = ("Counted over condition leaves only; frequency leaves have no control status. Report this beside the risk totals: the\n"
+    #         "observational variant moves nine leaves to Partial for a far smaller change in score, and neither measure alone is honest.")
+    note = None
     return C.finish(fig, ax, OUTPUT_DIR / "fig06_coverage_stacked_bar.png", note)
 
 
@@ -450,7 +453,7 @@ def fig_risk_class(m: Model):
 
 
 def fig_propagation(m: Model):
-    """Grouped bar -- gate-propagated root values. Requires the edge table."""
+    """Grouped Bar Graph: gate-propagated root values. Requires the edge table to exist."""
     if not m.has_edges:
         return None
     trees = [t for t in m.trees if t in m.node_by_id]
@@ -466,9 +469,6 @@ def fig_propagation(m: Model):
         for j, t in enumerate(trees):
             val = raw[v][j]
             if val is None:
-                # Not a zero root -- the tree has nothing scored under this
-                # variant. A zero bar would read as "no risk" rather than
-                # "does not exist", which is a different claim entirely.
                 absent.append((t, v))
                 continue
             ax.bar(x[j] + off, val, width * 0.92, color=SERIES[v], zorder=3,
@@ -479,13 +479,13 @@ def fig_propagation(m: Model):
         j = trees.index(t)
         i = m.variant_names.index(v)
         off = (i - (n - 1) / 2) * width
-        ax.text(x[j] + off, 0.18, "n/a", ha="center", va="bottom", fontsize=7.0,
+        ax.text(x[j] + off, 0.18, "N/A", ha="center", va="bottom", fontsize=7.0,
                 style="italic", color=INK_MUTED, rotation=90)
 
     ax.set_xticks(x)
     ax.set_xticklabels(trees)
-    ax.set_ylabel("Propagated root risk")
-    ax.set_title("Gate-propagated root risk by tree and variant")
+    ax.set_ylabel("Gate-Propagated Tree-Level Risk")
+    ax.set_title("Gate-Propagated Root Risk by Tree and Variant")
     ax.legend(loc="upper right", ncols=3)
     ax.set_ylim(0, 11.6)
     ax.set_yticks(C.BAND_LADDER)
@@ -496,12 +496,13 @@ def fig_propagation(m: Model):
         cc1 = m.critical_child(t, "Mediated")
         if cc0 and cc1 and cc0[0] != cc1[0]:
             crit.append(f"{t} ({cc0[0]} -> {cc1[0]})")
-    note = ("OR gates take MAX (the easiest available path), AND gates MIN (the weakest necessary link) -- ordinal bands do not support\n"
-            "probability arithmetic (Mauw & Oostdijk 2005). One effective control under an AND gate collapses the whole branch, so root\n"
-            "values fall quickly; read this with the aggregate and coverage measures, never alone. 'n/a' marks a tree with nothing\n"
-            "scored under that variant, which is not the same as a root of zero.\n"
-            + (f"The branch setting the root changes between baseline and mediated in: {', '.join(crit)} -- the control shifts which path\n"
-               "is easiest, rather than closing the goal." if crit else ""))
+    # note = ("OR gates take MAX (the easiest available path), AND gates MIN (the weakest necessary link) -- ordinal bands do not support\n"
+    #         "probability arithmetic (Mauw & Oostdijk 2005). One effective control under an AND gate collapses the whole branch, so root\n"
+    #         "values fall quickly; read this with the aggregate and coverage measures, never alone. 'n/a' marks a tree with nothing\n"
+    #         "scored under that variant, which is not the same as a root of zero.\n"
+    #         + (f"The branch setting the root changes between baseline and mediated in: {', '.join(crit)} -- the control shifts which path\n"
+    #            "is easiest, rather than closing the goal." if crit else ""))
+    note = None
     return C.finish(fig, ax, OUTPUT_DIR / "fig10_tree_propagation_bar.png", note)
 
 

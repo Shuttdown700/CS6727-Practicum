@@ -4,7 +4,7 @@ SENSITIVITY ANALYSIS
 common leaf set : 47 leaves scored under every variant
 band ladder     : [0, 2, 5, 8, 10]
 shifts tested   : [-2, -1, 0, 1, 2]
-monte carlo     : 4,000 trials, seed 20261009, per-band step probabilities -1/0/+1 = 0.22/0.56/0.22
+monte carlo     : 10,000 trials, seed 20261009, per-band step probabilities -1/0/+1 = 0.25/0.5/0.25
 
 Perturbed: the Frequency and Likelihood-of-Adverse-Impact bands on
 frequency leaves, and the Impact band on every leaf. NOT perturbed:
@@ -50,19 +50,19 @@ A. DETERMINISTIC BAND SHIFT
 B. MONTE CARLO DISTRIBUTION
 ------------------------------------------------------------------------------
   variant           as scored   median     mean      sd      p5    p25    p75     p95
-  Baseline                309      301    300.7    11.7     282    293    309     320
-  Observational           291      284    284.3    11.3     266    277    292     303
-  Mediated                163      159    158.8     8.7     145    153    165     173
+  Baseline                309      300    299.8    12.2     280    292    308     320
+  Observational           291      283    283.5    11.8     264    275    292     303
+  Mediated                163      158    158.4     9.1     144    152    165     173
 
   Risk reduction against baseline, computed per trial so numerator and
   denominator move together:
 
   variant           as scored   median      p5     p95   interval width
-  Observational          5.8%     5.5%    3.8%    7.1%            3.3 pts
-  Mediated              47.2%    47.2%   44.7%   49.8%            5.1 pts
+  Observational          5.8%     5.4%    3.8%    7.1%            3.3 pts
+  Mediated              47.2%    47.2%   44.5%   49.8%            5.4 pts
 
   Mediated beats observational in 100.0% of trials
-  (mean margin 125.5 points, sd 6.0).
+  (mean margin 125.1 points, sd 6.4).
 
   Report the interval rather than the point estimate. The as-scored value
   sits inside it by construction and is not more trustworthy than the rest

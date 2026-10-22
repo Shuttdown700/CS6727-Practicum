@@ -111,8 +111,8 @@ SERIES = {
     "Mediated":"#1baf7a",
 }
 
-DIV_GOOD = "#2a78d6"
-DIV_BAD  = "#e34948"
+DIV_GOOD = "#81C784"
+DIV_BAD  = "#E57373"
 DIV_ZERO = "#9b9a94"
 
 SEQ_BLUE = ["#86b6ef",
@@ -126,9 +126,9 @@ INK_SOFT = "#52514e"
 INK_MUTED = "#6e6d68"
 
 MEDIATION_STATUS_FILL = {
-    "Unaddressed":         "#104281",
-    "Partially Addressed": "#5598e7",
-    "Fully Addressed":     "#cde2fb",
+    "Unaddressed":         "#E57373",
+    "Partially Addressed": "#FFD54F",
+    "Fully Addressed":     "#81C784",
 }
 
 # UTILITY FUNCTIONS

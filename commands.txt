@@ -15,6 +15,7 @@ START A CAPTURE:
 SEGMENT THE NETWORK BASED ON VARIANTS:
     VERIFY SETUP (only run once): sudo ./evaluation/lab/segment.sh setup
     NETWORK SETUP BASELINE VARIANT: sudo ./evaluation/lab/segment.sh baseline
+    sudo mount -o remount,ro /mnt/labnas
     NETWORK SETUP OBS. VARIANT: sudo ./evaluation/lab/segment.sh observational
     NETWORK SETUP MED. VARIANT: sudo ./evaluation/lab/segment.sh mediated
 

@@ -89,19 +89,19 @@ REPOSITORY_PUBLISH_SUBDIR = "published"
 PRINTERS = [
     {
         "id": "mk4-01",
-        "label": "Prusa MK4 (bay 1)",
+        "label": "Prusa MK4 (Bay 1)",
         "driver": "prusalink",
-        "host": "192.168.50.31",
+        "host": "192.168.68.42",
         "port": 80,
         "username": "maker",
-        "password": "CHANGE-ME",
+        "password": "fF7HRmmXdPwry9L",
         "storages": ["usb"],      # also "local" on printers with internal flash
         "timeout_s": 8.0,
         "upload_timeout_s": 180.0,
     },
     {
         "id": "sim-01",
-        "label": "Simulated printer (bench)",
+        "label": "Simulated printer (Bench)",
         "driver": "simulator",
         "scenario": "unauthorized_usb_print",
     },
@@ -281,14 +281,14 @@ ACTIVITY_HEARTBEAT_EVERY_N_POLLS = 20
 # ARTIFACT VERIFICATION
 # =============================================================================
 ARTIFACT_MAX_DOWNLOAD_BYTES = 256 * 1024 * 1024
-ARTIFACT_VERIFY_EXTENSIONS = {".gcode", ".bgcode", ".3mf", ".stl"}
+ARTIFACT_VERIFY_EXTENSIONS = {".gcode", ".bgcode", ".3mf", ".stl",".step", ".stp", ".obj", ".amf"}
 ARTIFACT_RETAIN_COPIES = True
 
 
 # =============================================================================
 # EQUIPMENT CONFIGURATION INVENTORY
 # =============================================================================
-INVENTORY_SUBNETS = ["192.168.50.0/24"]
+INVENTORY_SUBNETS = ["172.16.0.0/16","192.168.67.0/24","192.168.68.0/24"]
 INVENTORY_PROBE_PORTS = [80, 443, 8080, 631, 9100, 22, 445]
 INVENTORY_PROBE_TIMEOUT_S = 0.35
 INVENTORY_MAX_WORKERS = 64
