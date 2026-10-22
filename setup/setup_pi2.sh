@@ -27,6 +27,21 @@ SHARE_PATH="${SHARE_PATH:-/srv/lab-nas}"
 SHARE_GROUP="${SHARE_GROUP:-labnas}"
 NAS_USER="${NAS_USER:-${SUDO_USER:-}}"
 SMB_PASS="${SMB_PASS:-}"
+
+# Service account for the mediating service on the Pi 5.
+#
+# This is what makes "the service is the sole write path" true rather than
+# merely intended. Operator accounts get READ on the share; only this account
+# can write. The firewall then does not have to block operator -> storage at
+# all, so the service being down stops publication without also stopping
+# people from opening a design.
+#
+# Set SVC_ENFORCE=0 to keep the old everyone-can-write share (baseline and
+# observational runs, where unmediated writes are the behaviour being measured).
+SVC_ENFORCE="${SVC_ENFORCE:-1}"
+SVC_USER="${SVC_USER:-fabguard}"
+SVC_GROUP="${SVC_GROUP:-labsvc}"
+SMB_SVC_PASS="${SMB_SVC_PASS:-}"
 ALLOW_HOSTS="${ALLOW_HOSTS:-127.0.0.1 172.16. 192.168.67.}"   # Samba prefix syntax
 ADMIN_PUBKEY="${ADMIN_PUBKEY:-}"            # SSH public key to install for NAS_USER
 ENABLE_VNC="${ENABLE_VNC:-0}"               # 1 = install VNC, loopback-only (SSH tunnel)
@@ -47,6 +62,20 @@ if [[ -z $SMB_PASS ]]; then
   [[ $SMB_PASS == "$p2" ]] || die "Passwords do not match."
 fi
 (( ${#SMB_PASS} >= 8 )) || die "Use at least 8 characters."
+
+if [[ $SVC_ENFORCE == 1 && -z $SMB_SVC_PASS ]]; then
+  echo "Service account '${SVC_USER}' is the only account allowed to WRITE the share."
+  echo "The Pi 5 mounts the share with these credentials."
+  read -rsp "Samba password for ${SVC_USER}: " SMB_SVC_PASS; echo
+  read -rsp "Confirm: " p2; echo
+  [[ $SMB_SVC_PASS == "$p2" ]] || die "Passwords do not match."
+fi
+if [[ $SVC_ENFORCE == 1 ]]; then
+  (( ${#SMB_SVC_PASS} >= 8 )) || die "Service password: use at least 8 characters."
+  [[ $SMB_SVC_PASS != "$SMB_PASS" ]] || die \
+    "The service password must differ from ${NAS_USER}'s. Sharing it would mean an \
+operator holding write credentials, which is the thing this separation removes."
+fi
 
 # ---- 1. static network --------------------------------------------------------
 if systemctl is-active --quiet NetworkManager; then
@@ -98,6 +127,26 @@ mkdir -p "$SHARE_PATH"
 chown root:"$SHARE_GROUP" "$SHARE_PATH"
 chmod 2770 "$SHARE_PATH"          # setgid: new files inherit the group
 
+if [[ $SVC_ENFORCE == 1 ]]; then
+  log "Preparing service account ${SVC_USER} (sole write path)"
+  getent group "$SVC_GROUP" >/dev/null || groupadd "$SVC_GROUP"
+  if ! id "$SVC_USER" &>/dev/null; then
+    # No login, no home: this account exists to hold a Samba credential.
+    useradd --system --no-create-home --shell /usr/sbin/nologin \
+            --gid "$SVC_GROUP" "$SVC_USER"
+    log "Created system user ${SVC_USER}"
+  fi
+  # SVC_GROUP drives the Samba write list; SHARE_GROUP gives POSIX write on
+  # the directory, which is 2770 root:${SHARE_GROUP}.
+  id -nG "$SVC_USER" | tr ' ' '\n' | grep -qx "$SVC_GROUP"   || usermod -aG "$SVC_GROUP" "$SVC_USER"
+  id -nG "$SVC_USER" | tr ' ' '\n' | grep -qx "$SHARE_GROUP" || usermod -aG "$SHARE_GROUP" "$SVC_USER"
+  # Operators must NOT be in the write list group.
+  if id -nG "$NAS_USER" | tr ' ' '\n' | grep -qx "$SVC_GROUP"; then
+    gpasswd -d "$NAS_USER" "$SVC_GROUP" >/dev/null
+    warn "Removed ${NAS_USER} from ${SVC_GROUP}: operators must not hold write."
+  fi
+fi
+
 # ---- 4. samba config ----------------------------------------------------------
 [[ -f /etc/samba/smb.conf && ! -f /etc/samba/smb.conf.bak.orig ]] && cp /etc/samba/smb.conf /etc/samba/smb.conf.bak.orig
 log "Writing /etc/samba/smb.conf"
@@ -128,8 +177,24 @@ cat > /etc/samba/smb.conf <<EOF
    comment = Lab NAS
    path = ${SHARE_PATH}
    browseable = yes
+$(if [[ $SVC_ENFORCE == 1 ]]; then cat <<SVC
+   # Write authority lives here, not in the firewall. Operators read; only the
+   # service account writes. That is what lets the mediated variant permit
+   # operator -> storage at L3 without giving up the sole-write-path claim --
+   # and it means the service being down stops publication without also
+   # stopping anyone from opening a design.
+   read only = yes
+   valid users = @${SHARE_GROUP} @${SVC_GROUP}
+   write list = @${SVC_GROUP}
+SVC
+else cat <<SVC
+   # SVC_ENFORCE=0: everyone with an account can write. This is the baseline
+   # and observational behaviour -- unmediated writes are what those variants
+   # are measuring, so do not "fix" it when running them.
    read only = no
    valid users = @${SHARE_GROUP}
+SVC
+fi)
    force group = ${SHARE_GROUP}
    create mask = 0660
    force create mode = 0660
@@ -142,6 +207,12 @@ testparm -s /etc/samba/smb.conf >/dev/null || die "smb.conf failed validation."
 log "Setting Samba password for ${NAS_USER}"
 printf '%s\n%s\n' "$SMB_PASS" "$SMB_PASS" | smbpasswd -s -a "$NAS_USER" >/dev/null
 smbpasswd -e "$NAS_USER" >/dev/null
+
+if [[ $SVC_ENFORCE == 1 ]]; then
+  log "Setting Samba password for ${SVC_USER}"
+  printf '%s\n%s\n' "$SMB_SVC_PASS" "$SMB_SVC_PASS" | smbpasswd -s -a "$SVC_USER" >/dev/null
+  smbpasswd -e "$SVC_USER" >/dev/null
+fi
 
 systemctl disable --now nmbd 2>/dev/null || true   # NetBIOS name service not used
 systemctl enable --now smbd
@@ -201,9 +272,31 @@ smbclient -L "//${WIRED_ADDR%/*}" -U "${NAS_USER}%${SMB_PASS}" -m SMB3 2>/dev/nu
 
 cat <<EOF
 
-[+] Done. //${WIRED_ADDR%/*}/${SHARE_NAME} is serving ${SHARE_PATH} as ${NAS_USER}.
+[+] Done. //${WIRED_ADDR%/*}/${SHARE_NAME} is serving ${SHARE_PATH}.
+$(if [[ $SVC_ENFORCE == 1 ]]; then cat <<SVC
+    WRITE  ${SVC_USER}   (the mediating service on the Pi 5, only)
+    READ   ${NAS_USER}   (operators)
+
+    Mount on the Pi 5 with the SERVICE credentials, or publication fails:
+      sudo mount -t cifs //${WIRED_ADDR%/*}/${SHARE_NAME} /mnt/labnas \\
+        -o username=${SVC_USER},vers=3.0,uid=\$(id -u),gid=\$(id -g)
+    Operator workstation, read-only by ACL whatever options are given:
+      sudo mount -t cifs //${WIRED_ADDR%/*}/${SHARE_NAME} /mnt/nas -o username=${NAS_USER},vers=3.0
+
+    Verify the separation actually holds before trusting a mediated run:
+      smbclient //${WIRED_ADDR%/*}/${SHARE_NAME} -U ${NAS_USER} -c 'put /etc/hostname t.txt'
+        -> must FAIL with NT_STATUS_ACCESS_DENIED or MEDIA_WRITE_PROTECTED
+      smbclient //${WIRED_ADDR%/*}/${SHARE_NAME} -U ${SVC_USER} -c 'put /etc/hostname t.txt; rm t.txt'
+        -> must SUCCEED
+    If the first one succeeds, the mediated variant's sole-write-path claim is
+    false and Repository Change Detection is the only thing catching writes.
+SVC
+else cat <<SVC
+    SVC_ENFORCE=0: every account with access can write (baseline / observational).
     Linux:    sudo mount -t cifs //${WIRED_ADDR%/*}/${SHARE_NAME} /mnt/nas -o username=${NAS_USER},vers=3.0
     Windows:  net use Z: \\\\${WIRED_ADDR%/*}\\${SHARE_NAME} /user:${NAS_USER}
+SVC
+fi)
     Logs:     journalctl -u smbd -f
 
     NOTE: ${NAS_USER} was added to '${SHARE_GROUP}' — log out and back in for local

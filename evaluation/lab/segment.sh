@@ -43,11 +43,35 @@
 #                  a share it can write to is asserting something it cannot
 #                  support.
 #
-#   mediated       The operator reaches nothing directly. This is where "the
-#                  service is the sole path" stops being a claim in the design
-#                  document and becomes true in fact — the application cannot
-#                  enforce it, the network can. Only the Pi (or MEDIATOR_IP)
-#                  reaches fabrication and storage.
+#   mediated       operator -> fabrication is DENIED: job submission is where
+#                  the authorization claim lives and the printer has no ACL of
+#                  its own, so the network has to carry it.
+#
+#                  operator -> storage is PERMITTED, deliberately. Write
+#                  mediation is enforced where the share is served, not here:
+#                  the Samba config grants write to the service account alone
+#                  and read to everyone else. Blocking the route as well would
+#                  enforce the same claim twice and make the service a single
+#                  point of failure for merely READING a design — fabguard
+#                  down would mean nobody can open a file. The firewall
+#                  governs reachability; the ACL governs write authority.
+#                  Those are different claims and they belong in different
+#                  places.
+#
+# BREAK-GLASS
+#   `breakglass on` permits operator -> fabrication for a bounded window, so a
+#   network fabrication path exists while the service is down. It is a
+#   separate, human-run command on purpose. fabguard never touches nftables:
+#   a control that opens itself when it believes it is failing means crashing
+#   the control IS the attack.
+#
+#   The window is time-limited and closes itself through a systemd timer. Work
+#   done during it is not authorized, only accounted for -- Fabrication
+#   Activity Recording, Fabrication Artifact Verification and Repository
+#   Change Detection catch it on their next pass once the service returns, and
+#   Job Reconciliation ties it to the degraded-mode exception covering that
+#   window. Open the exception in the portal as well, prospectively if it is
+#   still reachable and retrospectively if it was not.
 #
 # WAN EGRESS IS NOT A VARIANT PROPERTY
 #   Per-segment internet access is held CONSTANT across all three variants,
@@ -111,10 +135,16 @@ REPO_MOUNT="${REPO_MOUNT:-/mnt/labnas}"
 # software variant cannot silently disagree. Empty to skip the check.
 SOLUTION_CONFIG="${SOLUTION_CONFIG:-}"
 
+# Break-glass window length, in minutes. A window with no expiry is a disabled
+# control with a nicer name, so `breakglass on` always schedules its own close.
+BREAKGLASS_MINUTES="${BREAKGLASS_MINUTES:-120}"
+
 # State files and hook locations
 STATE_DIR="/etc/lab-segment"
 NFT_FILE="${STATE_DIR}/labseg.nft"
 VARIANT_FILE="${STATE_DIR}/variant"
+BG_STATE="${STATE_DIR}/breakglass"          # present = open; holds the expiry
+BG_UNIT="labseg-breakglass-off"             # transient systemd timer unit
 HOOK="/etc/NetworkManager/dispatcher.d/95-lab-segment"
 
 # The build scripts create their own tables to enforce per-segment firewalls. labseg deletes those tables and replaces them with its own rules, so it must know which tables to remove.
@@ -249,6 +279,18 @@ emit_accept() { # $1=saddr expr  $2=daddr expr  $3=comment
   echo "    $1 $2 counter accept comment \"$3\""
 }
 
+# Is a break-glass window open and unexpired? An expired state file is treated
+# as closed even if the timer that should have removed it never fired, so a
+# missed timer fails toward the control rather than away from it.
+bg_active() {
+  [[ -f $BG_STATE ]] || return 1
+  local expiry now
+  expiry="$(cat "$BG_STATE" 2>/dev/null)"
+  [[ -n $expiry ]] || return 1
+  now="$(date -u +%s)"
+  (( now < $(date -u -d "$expiry" +%s 2>/dev/null || echo 0) ))
+}
+
 # Generate the nftables ruleset for the given variant. This creates a table inet labseg with a forward chain that implements the segmentation policy, and a table ip labseg_nat that implements NAT for the storage segment. The generated ruleset is written to $NFT_FILE.
 gen_ruleset() {
   local variant="$1" up_if
@@ -267,11 +309,26 @@ gen_ruleset() {
       # would then measure nftables rather than the software.
       oper_fab=accept; oper_stor=accept; reverse=accept ;;
     mediated)
-      # The service is the sole path. This is the enforcement the application
-      # cannot provide for itself.
-      oper_fab=block;  oper_stor=block;  reverse=block ;;
+      # Job submission is mediated here because the printer has no ACL of its
+      # own. Storage is NOT blocked here: write mediation lives in the Samba
+      # config, which grants write to the service account alone. Enforcing it
+      # at L3 as well would mean fabguard being down stops people reading a
+      # design, which buys nothing the ACL does not already provide.
+      oper_fab=block;  oper_stor=accept;  reverse=block ;;
     *) die "Unknown variant '${variant}'." ;;
   esac
+
+  # Break-glass overrides the job-submission denial for the duration of the
+  # window. Regenerating the whole ruleset rather than inserting a rule keeps
+  # NFT_FILE the single source of truth, so the NetworkManager hook reapplies
+  # the window intact after a reconnect instead of silently closing it.
+  local bg_note=""
+  if bg_active; then
+    if [[ $variant == mediated ]]; then
+      oper_fab=accept
+      bg_note="  BREAK-GLASS OPEN until $(cat "$BG_STATE" 2>/dev/null)"
+    fi
+  fi
 
   local REJ="reject with icmpx admin-prohibited"
 
@@ -320,12 +377,17 @@ NFT
     # --- operator-initiated ---------------------------------------------------
     if [[ $oper_fab == block ]]; then
       emit_block "ip saddr ${OPER_NET}" "ip daddr ${FAB_NET}" "$REJ" "oper->fab blocked (${variant})"
+    elif [[ -n $bg_note ]]; then
+      emit_accept "ip saddr ${OPER_NET}" "ip daddr ${FAB_NET}" "oper->fab BREAK-GLASS (${variant})"
     else
       emit_accept "ip saddr ${OPER_NET}" "ip daddr ${FAB_NET}" "oper->fab permitted (${variant})"
     fi
 
     if [[ $oper_stor == block ]]; then
       emit_block "ip saddr ${OPER_NET}" "ip daddr ${STOR_NET}" "$REJ" "oper->storage blocked (${variant})"
+    elif [[ $variant == mediated ]]; then
+      emit_accept "ip saddr ${OPER_NET}" "ip daddr ${STOR_NET}" \
+                  "oper->storage reachable; writes denied at the Samba ACL"
     else
       emit_accept "ip saddr ${OPER_NET}" "ip daddr ${STOR_NET}" "oper->storage permitted (${variant})"
     fi
@@ -448,7 +510,120 @@ check_repo_mount() {
         echo "       sudo mount -o remount,rw ${REPO_MOUNT}" >&2
       else
         log "Share ${REPO_MOUNT} is writable — correct for mediated."
-      fi ;;
+      fi
+      # This mount is the SERVICE's. Operator workstations now reach the share
+      # directly and must be read-only there, which is a Samba question this
+      # script cannot answer from the Pi 5 side.
+      echo "       Confirm separately that operator workstations get READ ONLY:" >&2
+      echo "       on the NAS, 'read only = yes' with 'write list = @labsvc'." >&2
+      echo "       If an operator can still write, the mediated claim is false and" >&2
+      echo "       Repository Change Detection is the only thing catching it." >&2 ;;
+  esac
+}
+
+# Open or close the break-glass window.
+#
+# Deliberately a separate command, run by a person, never by fabguard. The
+# service is the thing most likely to be down when this is needed, and a
+# control that can open the path it enforces -- triggered by its own failure --
+# turns "crash the service" into the whole attack.
+do_breakglass() {
+  local action="${1:-}" variant expiry mins="${BREAKGLASS_MINUTES}"
+  variant="$(cat "$VARIANT_FILE" 2>/dev/null || echo '')"
+
+  case "$action" in
+    on)
+      [[ $variant == mediated ]] || die \
+        "Break-glass only means something under 'mediated' (current: ${variant:-none}). \
+Under baseline and observational the operator already reaches the equipment."
+      [[ $mins =~ ^[0-9]+$ && $mins -gt 0 ]] || die "BREAKGLASS_MINUTES must be a positive integer."
+
+      expiry="$(date -u -d "+${mins} minutes" +'%Y-%m-%dT%H:%M:%SZ')"
+      mkdir -p "$STATE_DIR"
+      printf '%s\n' "$expiry" > "$BG_STATE"
+      chmod 0644 "$BG_STATE"
+
+      gen_ruleset "$variant"
+      nft -c -f "$NFT_FILE" || die "Generated ruleset failed validation."
+      nft -f "$NFT_FILE"    || die "nft failed. Inspect ${NFT_FILE}"
+
+      # Close it automatically. A window nobody remembers to shut is an
+      # unmediated network with extra paperwork.
+      systemctl stop "${BG_UNIT}.timer" 2>/dev/null || true
+      if command -v systemd-run >/dev/null; then
+        systemd-run --unit="$BG_UNIT" --on-active="${mins}m" \
+          --description="Close the lab break-glass window" \
+          "$(readlink -f "$0")" breakglass off >/dev/null 2>&1 \
+          && log "Auto-close scheduled in ${mins} minute(s)" \
+          || warn "Could not schedule auto-close — CLOSE IT BY HAND."
+      else
+        warn "systemd-run unavailable — no auto-close. CLOSE IT BY HAND."
+      fi
+
+      command -v logger >/dev/null && \
+        logger -t labseg "break-glass OPENED until ${expiry} by ${SUDO_USER:-root}"
+
+      cat <<EOF
+
+  ######################################################################
+  #  BREAK-GLASS OPEN — operator -> fabrication is PERMITTED           #
+  #  expires ${expiry}                                   #
+  ######################################################################
+
+  Work done now is accounted for, not authorized. Do both of these:
+
+    1. Open a degraded-mode exception in the portal covering this window.
+       Prospectively if the portal is up; retrospectively if it was not.
+    2. Close this window as soon as the service is back:
+         sudo $0 breakglass off
+
+  Detection is retrospective, because the collectors are part of the
+  service that is down. On restart, Fabrication Activity Recording and
+  Fabrication Artifact Verification find what ran and what is on the
+  media, Repository Change Detection finds writes outside the sanctioned
+  path, and Job Reconciliation ties them to the covering exception.
+
+  A print that starts AND finishes inside the window may produce no
+  observed job -- the printer keeps no history this service can read.
+  The artifact left on the media is what catches it. Say so in the
+  write-up rather than claiming the window is fully observed.
+
+EOF
+      ;;
+
+    off)
+      systemctl stop "${BG_UNIT}.timer" 2>/dev/null || true
+      if [[ ! -f $BG_STATE ]]; then
+        log "Break-glass was not open."
+      else
+        rm -f "$BG_STATE"
+        command -v logger >/dev/null && \
+          logger -t labseg "break-glass CLOSED by ${SUDO_USER:-root}"
+        log "Break-glass closed"
+      fi
+      if [[ -n $variant ]]; then
+        gen_ruleset "$variant"
+        nft -c -f "$NFT_FILE" || die "Generated ruleset failed validation."
+        nft -f "$NFT_FILE"    || die "nft failed. Inspect ${NFT_FILE}"
+        log "Ruleset restored for variant '${variant}'"
+      fi
+      echo
+      echo "  Reconcile the window in the portal: close the degraded-mode"
+      echo "  exception and confirm what was fabricated during it."
+      echo
+      ;;
+
+    status|"")
+      if bg_active; then
+        log "Break-glass OPEN until $(cat "$BG_STATE")"
+      elif [[ -f $BG_STATE ]]; then
+        warn "Break-glass state file is EXPIRED ($(cat "$BG_STATE")) but still present."
+        warn "The ruleset treats it as closed. Run: sudo $0 breakglass off"
+      else
+        log "Break-glass closed"
+      fi
+      ;;
+    *) die "Usage: $0 breakglass {on|off|status}" ;;
   esac
 }
 
@@ -506,6 +681,14 @@ do_variant() {
   local variant="$1"
   mkdir -p "$STATE_DIR"
 
+  # Switching variants closes any open window. A break-glass carried silently
+  # into a different variant would be an open path nobody chose.
+  if [[ -f $BG_STATE ]]; then
+    rm -f "$BG_STATE"
+    systemctl stop "${BG_UNIT}.timer" 2>/dev/null || true
+    warn "Closed an open break-glass window before switching variant."
+  fi
+
   log "Generating ruleset for variant: ${variant}"
   gen_ruleset "$variant"
 
@@ -554,6 +737,9 @@ do_status() {
   cat <<EOF
 
   Variant          ${variant}
+  Break-glass      $(bg_active && echo "OPEN until $(cat "$BG_STATE")" \
+                      || { [[ -f $BG_STATE ]] && echo "EXPIRED file present — run: $0 breakglass off" \
+                           || echo "closed"; })
   Uplink           $(uplink_iface)
   WAN policy       operator ${OPER_WAN} · fabrication ${FAB_WAN} · storage ${STOR_WAN}
                    (constant across variants — environment, not solution)
@@ -603,8 +789,9 @@ do_teardown() {
   nft delete table inet labseg      2>/dev/null || true
   nft delete table ip   labseg_nat  2>/dev/null || true
 
+  systemctl stop "${BG_UNIT}.timer" 2>/dev/null || true
   rm -f "$HOOK" /etc/NetworkManager/dispatcher.d/pre-up.d/95-lab-segment
-  rm -f "$NFT_FILE" "$VARIANT_FILE"
+  rm -f "$NFT_FILE" "$VARIANT_FILE" "$BG_STATE"
 
   # Restore the build scripts' tables without forcing a reconnect.
   local entry hook con iface
@@ -629,6 +816,7 @@ do_teardown() {
 case "${1:-}" in
   setup)                              do_setup ;;
   baseline|observational|mediated)    do_variant "$1" ;;
+  breakglass)                         do_breakglass "${2:-status}" ;;
   status)                             do_status ;;
   teardown)                           do_teardown ;;
   minimal|full)
@@ -657,7 +845,7 @@ EOF
     exit 1 ;;
   *)
     cat <<EOF
-Usage: sudo $0 {setup|baseline|observational|mediated|status|teardown}
+Usage: sudo $0 {setup|baseline|observational|mediated|breakglass|status|teardown}
 
   setup          Verify segment addressing and enable AP isolation. Run once.
 
@@ -674,16 +862,26 @@ Usage: sudo $0 {setup|baseline|observational|mediated|status|teardown}
                    rather than the software.
                    Share should be mounted read-only; checked, not enforced.
 
-  mediated       Service is the sole path to storage and equipment.
-                   operator -> fabrication    DENIED
-                   operator -> storage        DENIED
+  mediated       Service is the sanctioned path.
+                   operator -> fabrication    DENIED  (no ACL on the printer,
+                                              so the network has to carry it)
+                   operator -> storage        PERMITTED; writes are denied at
+                                              the Samba ACL, not here
                    reverse-initiated          DENIED
-                   (the service on the Pi reaches everything)
-                   This is where "sole path" stops being a design claim and
-                   becomes true in fact. Share must be mounted read-write.
+                   Reachability is enforced here, write authority on the NAS.
+                   Enforcing both at L3 would make the service a single point
+                   of failure for reading a file, which the ACL already
+                   handles better.
 
-  status         Show addressing, AP isolation, active variant, rule counters,
-                 share mount, and whether the solution's config.py agrees.
+  breakglass on  Permit operator -> fabrication for ${BREAKGLASS_MINUTES} minutes so a network
+                 fabrication path exists while the service is down. Run by a
+                 person; fabguard never touches nftables. Closes itself via a
+                 systemd timer, and is closed by any variant switch.
+  breakglass off Close the window now and restore the variant's ruleset.
+  breakglass     Report whether a window is open.
+
+  status         Show addressing, AP isolation, active variant, break-glass
+                 state, rule counters, share mount, and config.py agreement.
   teardown       Remove segmentation; restore per-segment firewalls.
 
 WAN egress is held CONSTANT across all three variants, because it belongs to
@@ -696,7 +894,7 @@ mediation policy would confound the comparison.
 
 Env: OPER_CON FAB_CON STOR_CON OPER_NET FAB_NET STOR_ADDR
      OPER_WAN FAB_WAN STOR_WAN MEDIATOR_IP BLOCK_NETS LOG_DROPS
-     REPO_MOUNT SOLUTION_CONFIG
+     REPO_MOUNT SOLUTION_CONFIG BREAKGLASS_MINUTES
 EOF
     exit 1 ;;
 esac
