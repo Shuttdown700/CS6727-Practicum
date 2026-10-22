@@ -547,6 +547,19 @@ def create_app(scheduler=None) -> Flask:
         return render_template("firmware.html", images=fs.images(),
                                events=fs.events(150), printers=config.PRINTERS)
 
+    @app.route("/firmware/<int:fwid>/download", methods=["POST"])
+    @login_required
+    def firmware_download(fwid: int):
+        fs = need("firmware_staging")
+        try:
+            data, image = fs.download_image(g.actor, fwid)
+        except (ServiceError, ServiceUnavailable) as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("firmware"))
+        return send_file(io.BytesIO(data), as_attachment=True,
+                         download_name=image["name"],
+                         mimetype="application/octet-stream")
+
     @app.route("/degraded", methods=["GET", "POST"])
     @login_required
     def degraded():

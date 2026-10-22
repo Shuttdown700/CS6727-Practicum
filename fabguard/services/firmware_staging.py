@@ -48,6 +48,7 @@ import posixpath
 from pathlib import Path
 
 from .. import adapters, config
+from ..adapters.printer_prusalink import UnsupportedUpload
 from ..core import db
 from ..core.services import (Actor, Service, ServiceError, ServiceUnavailable,
                              sha256_bytes)
@@ -132,6 +133,31 @@ class FirmwareStaging(Service):
 
         try:
             printer.upload(storage, remote, data, print_after=False, overwrite=True)
+        except UnsupportedUpload as exc:
+            # Not a transient failure and not a misconfiguration. PrusaLink
+            # validates uploads as print jobs, the published API has no
+            # firmware endpoint, and the file listing returns only
+            # PRINT_FILE entries -- so the service can neither place the
+            # image on the machine nor read back what is there. Record the
+            # limitation against this attempt and tell the operator what to
+            # do instead, rather than inviting them to retry.
+            self._event(actor, printer_id, firmware_id, "UNSUPPORTED",
+                        result=f"equipment refuses non-print uploads: {exc}", note=note)
+            self.emit("firmware.stage_unsupported", actor, subject=printer_id,
+                      data={"firmware_id": firmware_id, "sha256": image["sha256"],
+                            "storage": storage, "remote_path": remote,
+                            "reason": str(exc),
+                            "note": "Equipment limitation, not a service fault. "
+                                    "Firmware delivery on this machine is manual; the "
+                                    "service records the authoritative image and "
+                                    "observes the version that results."})
+            raise ServiceError(
+                f"{printer.label} will not accept {image['name']}: this machine takes "
+                f"only print files over the network and has no firmware endpoint. "
+                f"Download the recorded image from this page, copy it to the drive "
+                f"yourself, flash it at the panel, then use 'declare applied' so the "
+                f"service can check the version the machine reports against what you "
+                f"declared.") from exc
         except Exception as exc:
             self._event(actor, printer_id, firmware_id, "FAILED",
                         result=f"upload failed: {exc}", note=note)
@@ -177,6 +203,38 @@ class FirmwareStaging(Service):
                         "verified": True, "detail": detail})
         return {"firmware": image, "printer_id": printer_id, "verified": True,
                 "detail": detail, "remote_path": remote, "storage": storage}
+
+    def download_image(self, actor: Actor, firmware_id: int) -> tuple[bytes, dict]:
+        """
+        Hand the operator the exact bytes the service recorded.
+
+        On equipment that refuses programmatic firmware delivery, the operator
+        carries the image to the machine by hand. Without this, they go back
+        to the vendor site and fetch it again, and the file that reaches the
+        drive is then one the service never saw -- which defeats the point of
+        recording an authoritative image in the first place.
+
+        This does not make the last hop verifiable. It makes the bytes
+        leaving the service the recorded ones, and records who took them.
+        """
+        self.require_mediated()
+        image = self.get_image(firmware_id)
+        data = Path(image["object_path"]).read_bytes()
+        if sha256_bytes(data) != image["sha256"]:
+            raise ServiceError(
+                f"the stored copy of {image['name']} no longer matches its recorded "
+                f"hash -- the firmware store on this host is damaged")
+        self.custody.record_custody(actor, "FIRMWARE_DOWNLOAD",
+                                    sha256=image["sha256"], name=image["name"],
+                                    purpose="manual firmware delivery to equipment")
+        self.emit("firmware.image_downloaded", actor, subject=image["name"],
+                  data={"firmware_id": firmware_id, "sha256": image["sha256"],
+                        "version_label": image["version_label"],
+                        "note": "Operator took the recorded image for manual "
+                                "delivery. The copy onto removable media and the "
+                                "flash itself are outside what the service can "
+                                "observe on this equipment."})
+        return data, image
 
     def declare_applied(self, actor: Actor, printer_id: str, firmware_id: int,
                         note: str = "") -> dict:

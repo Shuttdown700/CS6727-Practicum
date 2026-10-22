@@ -13,6 +13,17 @@ operator-declared application alongside the version the machine actually reports
   the machine reports afterwards. A disagreement between the two is a finding.
 </div>
 
+<div class="banner warn">
+  <strong>It cannot place the image on the drive either.</strong> PrusaLink validates
+  uploads as print jobs and answers a firmware image with <em>415 Not a GCODE</em>;
+  the published API has no firmware endpoint, and the file listing returns only
+  print files, so the service can neither write the image to the drive nor read back
+  what is on it. Delivery is manual on this equipment. Download the recorded image
+  below rather than fetching it from the vendor again — that keeps the bytes reaching
+  the drive the bytes the service hashed, and records who collected them. The copy
+  onto the drive and the flash itself remain unobservable.
+</div>
+
 <div class="grid g2">
   <div class="panel">
     <h2 style="margin-top:0">Record an image</h2>
@@ -57,14 +68,18 @@ operator-declared application alongside the version the machine actually reports
 <div class="panel">
   <h2 style="margin-top:0">Recorded images</h2>
   <table>
-    <tr><th>Image</th><th>Label</th><th>SHA-256</th><th>Size</th><th>Recorded by</th><th>Note</th></tr>
+    <tr><th>Image</th><th>Label</th><th>SHA-256</th><th>Size</th><th>Recorded by</th>
+        <th>Note</th><th>Collect</th></tr>
     {% for i in images %}
     <tr><td class="small">{{ i.name }}</td><td class="small">{{ i.version_label or '—' }}</td>
         <td class="mono small">{{ i.sha256 | shorthash }}</td>
         <td class="small nowrap">{{ '{:,}'.format(i.size) }}</td>
         <td class="small">{{ i.recorded_by }}<br><span class="muted">{{ i.recorded_ts }}</span></td>
-        <td class="small">{{ i.note or '' }}</td></tr>
-    {% else %}<tr><td colspan="6" class="muted">None.</td></tr>{% endfor %}
+        <td class="small">{{ i.note or '' }}</td>
+        <td><form method="post" action="{{ url_for('firmware_download', fwid=i.id) }}">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <button class="small">Download</button></form></td></tr>
+    {% else %}<tr><td colspan="7" class="muted">None.</td></tr>{% endfor %}
   </table>
 </div>
 

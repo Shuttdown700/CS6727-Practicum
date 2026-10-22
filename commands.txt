@@ -31,3 +31,4 @@ From root:
 source ./fabguard/venv/bin/activate
 [if needed] rm fabguard/data/events.jsonl
 sudo ./evaluation/lab/segment.sh baseline
+python3 -m fabguard.run

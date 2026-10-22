@@ -51,6 +51,18 @@ class PrinterError(RuntimeError):
     pass
 
 
+class UnsupportedUpload(PrinterError):
+    """
+    The machine refused the upload because of what the file is.
+
+    PrusaLink validates uploads to /api/v1/files as print jobs and answers a
+    firmware image with 415 "Not a GCODE". There is no firmware endpoint in
+    the published API, so this is a property of the equipment and not a
+    condition a caller can retry its way out of. Callers catch this
+    separately so they can say so plainly instead of surfacing raw HTTP.
+    """
+
+
 class PrusaLinkPrinter:
     driver = "prusalink"
 
@@ -107,6 +119,11 @@ class PrusaLinkPrinter:
                 f"against what /api/v1/storage reports.")
         if r.status_code == 404:
             raise FileNotFoundError(f"{self.id}: 404 {path}")
+        if r.status_code == 415:
+            raise UnsupportedUpload(
+                f"{self.id}: 415 from {method} {path} -- the machine accepts only print "
+                f"files on this endpoint and refused this one"
+                + (f" ({r.text[:120]})" if r.text else ""))
         if r.status_code == 409:
             raise PrinterError(
                 f"{self.id}: 409 from {method} {path} -- the file already exists, or the "
