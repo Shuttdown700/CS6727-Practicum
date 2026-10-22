@@ -87,12 +87,24 @@ class PrusaLinkPrinter:
                                       headers=headers or {})
         except requests.RequestException as exc:
             raise PrinterError(f"{self.id}: {type(exc).__name__} talking to {url}") from exc
-        if r.status_code in (401, 403):
+        if r.status_code == 401:
             raise PrinterError(
-                f"{self.id}: {r.status_code} from {method} {path}. PrusaLink uses HTTP "
-                f"Digest with the PrusaLink username and password (printer: Settings -> "
-                f"Network -> PrusaLink). Check those in config.PRINTERS -- no API key is "
-                f"needed over the LAN.")
+                f"{self.id}: 401 from {method} {path}. PrusaLink uses HTTP Digest with "
+                f"the PrusaLink username and password (printer: Settings -> Network -> "
+                f"PrusaLink). Check those in config.PRINTERS -- no API key is needed "
+                f"over the LAN.")
+        if r.status_code == 403:
+            # 403 is NOT an authentication failure. The digest exchange
+            # succeeded and the printer then refused the request, which on
+            # this hardware means the storage or the operation is not
+            # available -- asking for 'local' on a machine whose only storage
+            # is the USB port, for instance. Reporting it as a credentials
+            # problem sends the operator to check settings that are working.
+            raise PrinterError(
+                f"{self.id}: 403 from {method} {path}. Authentication succeeded and the "
+                f"printer refused the request -- usually a storage or operation this "
+                f"machine does not offer. Check the 'storages' list in config.PRINTERS "
+                f"against what /api/v1/storage reports.")
         if r.status_code == 404:
             raise FileNotFoundError(f"{self.id}: 404 {path}")
         if r.status_code == 409:
