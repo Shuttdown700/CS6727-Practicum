@@ -3,9 +3,9 @@
 Description: Determines how much of the evaluation survives estimation error in the band assignments.
 
 Usage:
-    python3 sensitivity.py
+    python3 evaluate_sensitivity.py
 
-Configuration is hardcoded in the CONFIG block (below) and in core.py.
+Configuration is hardcoded in the CONFIG block (below) and in core_risk.py.
 
 Two sensitivity analysises are performed:
     (1) Deterministic Band Shift: every estimated band is moved the same number of steps along the 0/2/5/8/10 ladder.
@@ -22,8 +22,8 @@ from collections import Counter
 import numpy as np
 import matplotlib.pyplot as plt
 
-import core as C
-from core import Model, OUTPUT_DIR, SERIES, INK, INK_SOFT, INK_MUTED
+import core_risk as C
+from core_risk import Model, OUTPUT_DIR, SERIES, INK, INK_SOFT, INK_MUTED
 
 
 ## CONFIG

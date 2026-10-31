@@ -20,8 +20,8 @@ trees referenced by leaves but having no Root node row: none
 condition leaves with no mapped solution feature (4):
   L-052, L-055, L-061, L-063
 
-mapped leaves with no effect-confidence value (0):
-  none
+mapped leaves with no effect-confidence value (34):
+  L-005, L-006, L-008, L-010, L-012, L-013, L-014, L-015, L-016, L-024, L-025, L-026, L-027, L-028, L-029, L-030, L-031, L-033, L-034, L-035, L-037, L-038, L-039, L-041, L-042, L-043, L-053, L-056, L-057, L-058, L-059, L-060, L-062, L-064
 
 duplicate leaf descriptions: 0
 

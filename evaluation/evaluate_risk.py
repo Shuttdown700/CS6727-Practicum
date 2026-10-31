@@ -4,10 +4,10 @@ Description: Ingest the Control Traceability Matrix workbook, score it, and
 write infographics (.png) plus raw score dumps (.txt) to ../output.
 
 Usage:
-    python3 evaluate.py
+    python3 evaluate_risk.py
 
 Usage Note:
-    No arguments. All configuration lives in core.py.
+    No arguments. All configuration lives in core_risk.py.
     This script is intended to be run in the /evaluation directory, with the workbook in ../input and the output written to ../output.
 
 WHAT THIS PRODUCES
@@ -43,7 +43,7 @@ A NOTE ON TREE-LEVEL SCORES
         Structure" sheet lists nodes and gate types but no edges. Add an
         "Attack Tree Edges" sheet (columns Tree / Parent ID / Child ID /
         Child Order) and this script computes it automatically. build_edges.py
-        generates that sheet from the ASCII trees; run evaluate.py once
+        generates that sheet from the ASCII trees; run evaluate_risk.py once
         without it and a blank template is written to ../output instead.
 """
 
@@ -55,8 +55,8 @@ from collections import Counter, defaultdict
 import numpy as np
 import matplotlib.pyplot as plt
 
-import core as C
-from core import Model, OUTPUT_DIR, SERIES, DIV_GOOD, DIV_BAD, DIV_ZERO, INK, INK_SOFT, INK_MUTED
+import core_risk as C
+from core_risk import Model, OUTPUT_DIR, SERIES, DIV_GOOD, DIV_BAD, DIV_ZERO, INK, INK_SOFT, INK_MUTED
 
 
 # =============================================================================
@@ -151,7 +151,7 @@ def fig_aggregate(m: Model):
     #     f"{m.total('Mediated', med_only)} points of introduced risk (see scores_summary.txt)."
     # )
     note = None
-    return C.finish(fig, ax, OUTPUT_DIR / "fig01_aggregate_risk_bar.png", note)
+    return C.finish(fig, ax, OUTPUT_DIR / "figR01_aggregate_risk_bar.png", note)
 
 
 def fig_tree_risk(m: Model):
@@ -173,11 +173,11 @@ def fig_tree_risk(m: Model):
     # note = ("Sum of leaf risk over leaves assigned to each tree. A leaf shared by two trees counts once in each, so tree totals do not\n"
     #         "sum to the grand total. AN-7 is zero at baseline and observational because its leaves presuppose a mediating service to fail.")
     note = None
-    return C.finish(fig, ax, OUTPUT_DIR / "fig02_tree_risk_bar.png", note)
+    return C.finish(fig, ax, OUTPUT_DIR / "figR02_tree_risk_bar.png", note)
 
 
 def fig_tree_delta(m: Model):
-    """Diverging Bar Graph: per-tree change against baseline. The tree-level view."""
+    """Diverging Bar Graph: per-tree change against baseline. The leaf-level view."""
     variants = [v for v in m.variant_names if v != C.BASELINE]
     trees = m.trees
     fig, axes = plt.subplots(1, len(variants), figsize=(10.4, 4.2), sharex=True)
@@ -218,14 +218,14 @@ def fig_tree_delta(m: Model):
         ax.set_title(f"{v} vs. {C.BASELINE}", fontsize=10.5)
         ax.set_xlabel("Change in Aggregate Leaf-Level Risk")
 
-    fig.suptitle("Change in Tree-Level Risk Against Baseline", y=1.02,
+    fig.suptitle("Change in Aggregate Leaf-Level Risk Against Baseline", y=1.02,
                  fontsize=12, fontweight="bold", color=INK)
     # note = ("Blue is a reduction, red an increase, grey no change. AN-7 increases under the mediated variant because the architecture\n"
     #         "introduces a service that can fail -- a real cost of the design, not an artefact of the scoring."
     #         + ("\nWhere a tree exists under neither variant it is marked not-applicable rather than drawn as a zero bar, which would "
     #            "assert\nno effect where the honest statement is that the tree does not exist yet." if absent else ""))
     note = None
-    return C.finish(fig, axes, OUTPUT_DIR / "fig03_tree_delta_bar.png", note)
+    return C.finish(fig, axes, OUTPUT_DIR / "figR03_tree_delta_bar.png", note)
 
 
 def fig_leaf_dumbbell(m: Model):
@@ -283,7 +283,7 @@ def fig_leaf_dumbbell(m: Model):
             f"dot means all three variants agree -- either a frequency leaf, constant by construction, or a condition leaf no variant moves.\n"
             f"The {len(absent_rows)} shaded rows are leaves with no baseline score at all: the AN-7 leaves presuppose a mediating service to fail, so they\n"
             f"exist only under the mediated variant and their single marker is the only score there is.")
-    return C.finish(fig, ax, OUTPUT_DIR / "fig04_leaf_dumbbell_dot.png", note)
+    return C.finish(fig, ax, OUTPUT_DIR / "figR04_leaf_dumbbell_dot.png", note)
 
 
 def fig_leaf_delta(m: Model):
@@ -324,7 +324,7 @@ def fig_leaf_delta(m: Model):
     note = (f"{still} of the {len([lf for lf in m.leaves if lf.present(C.BASELINE)])} leaves scored at baseline do not move under any variant and are omitted.\n"
             "A leaf can improve in status without moving here: Table I-2 returns the same risk at likelihood 10 and likelihood 5 when\n"
             "impact is Moderate, so a partial control on a Moderate-impact leaf is numerically invisible. Read this beside fig06.")
-    return C.finish(fig, ax, OUTPUT_DIR / "fig05_leaf_delta_dot.png", note)
+    return C.finish(fig, ax, OUTPUT_DIR / "figR05_leaf_delta_dot.png", note)
 
 
 def fig_coverage(m: Model):
@@ -357,7 +357,7 @@ def fig_coverage(m: Model):
     # note = ("Counted over condition leaves only; frequency leaves have no control status. Report this beside the risk totals: the\n"
     #         "observational variant moves nine leaves to Partial for a far smaller change in score, and neither measure alone is honest.")
     note = None
-    return C.finish(fig, ax, OUTPUT_DIR / "fig06_coverage_stacked_bar.png", note)
+    return C.finish(fig, ax, OUTPUT_DIR / "figR06_coverage_stacked_bar.png", note)
 
 
 def fig_cumulative(m: Model):
@@ -385,7 +385,7 @@ def fig_cumulative(m: Model):
     note = (f"Ranking is fixed by baseline risk so the three curves stay comparable. Half of all baseline risk sits in the top {k} "
             f"leaves of {len(leaves)}.\nWhere the gap between a variant curve and the baseline curve stops widening, that variant is not reaching that part of the\n"
             "model; the steepest separation marks where it does the most work.")
-    return C.finish(fig, ax, OUTPUT_DIR / "fig07_cumulative_risk_line.png", note)
+    return C.finish(fig, ax, OUTPUT_DIR / "figR07_cumulative_risk_line.png", note)
 
 
 def fig_feature_attribution(m: Model):
@@ -426,7 +426,7 @@ def fig_feature_attribution(m: Model):
             + (f"Absent because every leaf they address exists only under the mediated variant, leaving no baseline to reduce against: "
                f"{', '.join(nobase)}.\n" if nobase else "")
             + (f"Condition leaves left unmapped under the mediated variant: {', '.join(unmapped)}." if unmapped else ""))
-    return C.finish(fig, ax, OUTPUT_DIR / "fig08_feature_attribution_bar.png", note)
+    return C.finish(fig, ax, OUTPUT_DIR / "figR08_feature_attribution_bar.png", note)
 
 
 def fig_risk_class(m: Model):
@@ -449,7 +449,7 @@ def fig_risk_class(m: Model):
 
     note = ("A leaf mapped to two risk classes counts in both, so these columns do not sum to the grand total. Use this to find classes\n"
             "the architecture leaves untouched, not to apportion total risk.")
-    return C.finish(fig, ax, OUTPUT_DIR / "fig09_riskclass_bar.png", note)
+    return C.finish(fig, ax, OUTPUT_DIR / "figR09_riskclass_bar.png", note)
 
 
 def fig_propagation(m: Model):
@@ -503,7 +503,7 @@ def fig_propagation(m: Model):
     #         + (f"The branch setting the root changes between baseline and mediated in: {', '.join(crit)} -- the control shifts which path\n"
     #            "is easiest, rather than closing the goal." if crit else ""))
     note = None
-    return C.finish(fig, ax, OUTPUT_DIR / "fig10_tree_propagation_bar.png", note)
+    return C.finish(fig, ax, OUTPUT_DIR / "figR10_tree_propagation_bar.png", note)
 
 
 # =============================================================================
